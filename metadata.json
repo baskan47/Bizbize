@@ -1,0 +1,8 @@
+{
+  "name": "StitchSecure - E2EE Communication Ecosystem",
+  "description": "A high-security communication platform featuring real-time E2EE messaging, live screen sharing, and advanced media management with MongoDB Atlas-inspired aesthetics.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

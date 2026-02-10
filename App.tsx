@@ -1,0 +1,201 @@
+
+import React, { useState, useEffect } from 'react';
+import { ScreenType, ChatItem, Message, CallType } from './types';
+import ChatListScreen from './components/ChatListScreen';
+import ChatDetailScreen from './components/ChatDetailScreen';
+import LiveStreamScreen from './components/LiveStreamScreen';
+import AttachmentScreen from './components/AttachmentScreen';
+import SettingsScreen from './components/SettingsScreen';
+import CallingScreen from './components/CallingScreen';
+
+const App: React.FC = () => {
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>(ScreenType.CHAT_LIST);
+  const [selectedChat, setSelectedChat] = useState<ChatItem | null>(null);
+  const [globalMessages, setGlobalMessages] = useState<Record<string, Message[]>>({});
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768);
+  const [activeCall, setActiveCall] = useState<{ type: CallType; chat: ChatItem; isIncoming?: boolean } | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const large = window.innerWidth >= 768;
+      setIsLargeScreen(large);
+      if (large && !selectedChat && currentScreen === ScreenType.CHAT_DETAIL) {
+        setCurrentScreen(ScreenType.CHAT_LIST);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [selectedChat, currentScreen]);
+
+  // Simulated Incoming Call after 10 seconds of inactivity on Chat List
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentScreen === ScreenType.CHAT_LIST && !activeCall) {
+        const caller: ChatItem = {
+          id: 'caller-sim',
+          name: 'Sarah Jenkins',
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
+          lastMessage: '',
+          time: 'Now',
+          unreadCount: 0,
+          type: 'user'
+        };
+        setActiveCall({ type: 'video', chat: caller, isIncoming: true });
+        setCurrentScreen(ScreenType.CALLING);
+      }
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [currentScreen, activeCall]);
+
+  const navigateToChat = (chat: ChatItem) => {
+    setSelectedChat(chat);
+    if (!isLargeScreen) {
+      setCurrentScreen(ScreenType.CHAT_DETAIL);
+    }
+  };
+
+  const startCall = (type: CallType, chat: ChatItem) => {
+    setActiveCall({ type, chat, isIncoming: false });
+    setCurrentScreen(ScreenType.CALLING);
+  };
+
+  const handleNavClick = (screen: ScreenType) => {
+    setCurrentScreen(screen);
+  };
+
+  const handleSendMessage = (chatId: string, message: Message) => {
+    setGlobalMessages(prev => ({
+      ...prev,
+      [chatId]: [...(prev[chatId] || []), message]
+    }));
+  };
+
+  return (
+    <div className="flex h-screen w-screen bg-background-dark text-white overflow-hidden font-sans">
+      {/* 1. SIDE NAVIGATION (Desktop Only) */}
+      {isLargeScreen && (
+        <aside className="w-20 bg-surface-dark border-r border-white/5 flex flex-col items-center py-8 gap-8 shrink-0">
+          <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 mb-4 cursor-pointer hover:rotate-12 transition-transform">
+            <span className="material-icons-round text-white text-3xl">bolt</span>
+          </div>
+          <NavRailButton icon="chat_bubble" active={currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.CHAT_DETAIL} onClick={() => handleNavClick(ScreenType.CHAT_LIST)} />
+          <NavRailButton icon="explore" active={currentScreen === ScreenType.DISCOVERY} onClick={() => handleNavClick(ScreenType.DISCOVERY)} />
+          <NavRailButton icon="people" active={false} onClick={() => {}} />
+          <div className="mt-auto">
+            <NavRailButton icon="settings" active={currentScreen === ScreenType.SETTINGS} onClick={() => handleNavClick(ScreenType.SETTINGS)} />
+          </div>
+        </aside>
+      )}
+
+      {/* 2. LEFT COLUMN (Chat List / Settings) */}
+      <div className={`${isLargeScreen ? 'w-80 lg:w-96 border-r border-white/5' : (currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.SETTINGS || currentScreen === ScreenType.DISCOVERY ? 'w-full' : 'hidden')} flex-shrink-0 bg-background-dark relative`}>
+        {currentScreen === ScreenType.SETTINGS ? (
+          <SettingsScreen onNavClick={handleNavClick} activeScreen={currentScreen} hideFooter={isLargeScreen} />
+        ) : currentScreen === ScreenType.DISCOVERY ? (
+          <DiscoveryPlaceholder onBack={() => handleNavClick(ScreenType.CHAT_LIST)} onGoLive={() => setCurrentScreen(ScreenType.LIVE_STREAM)} />
+        ) : (
+          <ChatListScreen 
+            onSelectChat={navigateToChat} 
+            onDiscovery={() => setCurrentScreen(ScreenType.DISCOVERY)}
+            onNavClick={handleNavClick}
+            activeScreen={currentScreen}
+            hideFooter={isLargeScreen}
+            selectedChatId={selectedChat?.id}
+          />
+        )}
+      </div>
+
+      {/* 3. MAIN AREA */}
+      <main className={`flex-1 flex flex-col relative bg-background-dark ${!isLargeScreen && (currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.SETTINGS || currentScreen === ScreenType.DISCOVERY) ? 'hidden' : 'flex'}`}>
+        {currentScreen === ScreenType.CALLING && activeCall ? (
+          <CallingScreen 
+            callType={activeCall.type} 
+            chat={activeCall.chat} 
+            isIncoming={activeCall.isIncoming}
+            onEnd={() => {
+              setActiveCall(null);
+              setCurrentScreen(isLargeScreen ? ScreenType.CHAT_LIST : ScreenType.CHAT_DETAIL);
+            }} 
+          />
+        ) : !selectedChat && isLargeScreen && currentScreen !== ScreenType.LIVE_STREAM ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-12 text-center">
+            <div className="w-24 h-24 bg-surface-dark rounded-full flex items-center justify-center mb-6 border border-white/5">
+              <span className="material-icons-round text-5xl text-primary/30">verified_user</span>
+            </div>
+            <h2 className="text-xl font-bold text-slate-300">StitchSecure Guard Active</h2>
+            <p className="max-w-xs mt-2 text-sm">Military-grade E2EE is enabled for all communications. Select a contact or start a public broadcast from the Discovery tab.</p>
+          </div>
+        ) : (
+          <>
+            {selectedChat && (currentScreen === ScreenType.CHAT_DETAIL || isLargeScreen) && currentScreen !== ScreenType.LIVE_STREAM && currentScreen !== ScreenType.ATTACHMENTS && (
+              <ChatDetailScreen 
+                chat={selectedChat} 
+                initialMessages={globalMessages[selectedChat.id] || []}
+                onUpdateMessages={(msgs) => setGlobalMessages(p => ({ ...p, [selectedChat.id]: msgs }))}
+                onBack={() => isLargeScreen ? setSelectedChat(null) : setCurrentScreen(ScreenType.CHAT_LIST)}
+                onOpenAttachments={() => setCurrentScreen(ScreenType.ATTACHMENTS)}
+                onGoLive={() => setCurrentScreen(ScreenType.LIVE_STREAM)}
+                onCall={(type) => startCall(type, selectedChat)}
+                isLargeScreen={isLargeScreen}
+              />
+            )}
+
+            {currentScreen === ScreenType.LIVE_STREAM && (
+              <LiveStreamScreen onClose={() => isLargeScreen ? setCurrentScreen(ScreenType.CHAT_LIST) : setCurrentScreen(ScreenType.CHAT_DETAIL)} />
+            )}
+
+            {currentScreen === ScreenType.ATTACHMENTS && selectedChat && (
+              <AttachmentScreen 
+                onClose={() => setCurrentScreen(ScreenType.CHAT_DETAIL)} 
+                onSend={(msg) => {
+                  handleSendMessage(selectedChat.id, msg);
+                  setCurrentScreen(ScreenType.CHAT_DETAIL);
+                }}
+              />
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  );
+};
+
+const NavRailButton: React.FC<{ icon: string; active: boolean; onClick: () => void }> = ({ icon, active, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${active ? 'bg-primary/20 text-primary' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+  >
+    <span className="material-icons-round text-2xl">{icon}</span>
+  </button>
+);
+
+const DiscoveryPlaceholder: React.FC<{onBack: () => void, onGoLive: () => void}> = ({onBack, onGoLive}) => (
+  <div className="p-8 text-center h-full flex flex-col justify-center items-center bg-background-dark animate-in fade-in zoom-in-95 duration-300">
+    <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mb-6 border border-primary/20">
+      <span className="material-icons-round text-5xl text-primary">explore</span>
+    </div>
+    <h2 className="text-2xl font-bold mb-2">Discovery Portal</h2>
+    <p className="text-slate-400 mb-8 max-w-xs mx-auto text-sm leading-relaxed">Discover trending public broadcasts and verified security channels.</p>
+    <div className="grid grid-cols-1 gap-4 w-full max-w-sm">
+       <div onClick={onGoLive} className="bg-surface-dark p-5 rounded-2xl border border-white/5 flex items-center gap-4 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all group">
+          <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform"><span className="material-icons-round">campaign</span></div>
+          <div className="text-left flex-1">
+            <p className="font-bold text-sm">Public Broadcasts</p>
+            <p className="text-[10px] text-slate-500">12 secure streams active now</p>
+          </div>
+          <span className="material-icons-round text-slate-600 text-lg group-hover:text-primary transition-colors">arrow_forward</span>
+       </div>
+       <div className="bg-surface-dark p-5 rounded-2xl border border-white/5 flex items-center gap-4 cursor-pointer hover:border-stitch-green/50 hover:bg-stitch-green/5 transition-all group">
+          <div className="w-12 h-12 bg-stitch-green/20 rounded-xl flex items-center justify-center text-stitch-green group-hover:scale-110 transition-transform"><span className="material-icons-round">groups</span></div>
+          <div className="text-left flex-1">
+            <p className="font-bold text-sm">Security Hub</p>
+            <p className="text-[10px] text-slate-500">Official developer channel</p>
+          </div>
+          <span className="material-icons-round text-slate-600 text-lg group-hover:text-stitch-green transition-colors">arrow_forward</span>
+       </div>
+    </div>
+    <button onClick={onBack} className="mt-10 text-slate-500 text-xs font-bold uppercase tracking-[0.2em] hover:text-white transition-colors">Back to conversations</button>
+  </div>
+);
+
+export default App;

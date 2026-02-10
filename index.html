@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <title>StitchSecure</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0088cc',
+            'background-dark': '#0f1c23',
+            'surface-dark': '#16252d',
+            'stitch-green': '#00ed64',
+            'stitch-blue': '#0068ff',
+            'stitch-border': 'rgba(255, 255, 255, 0.1)'
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0b1217;
+      color: #e1e7ec;
+      overflow: hidden;
+      /* Prevent scrolling bouncing on iOS */
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+    #root {
+      height: 100%;
+      width: 100%;
+    }
+    .glass {
+      background: rgba(22, 37, 45, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #2a3d48;
+      border-radius: 10px;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 5px rgba(0, 136, 204, 0.2); }
+      50% { box-shadow: 0 0 20px rgba(0, 136, 204, 0.6); }
+    }
+    .pulse-glow {
+      animation: pulse-glow 2s infinite;
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
+  }
+}
+</script>
+</head>
+<body class="font-sans antialiased">
+  <div id="root"></div>
+</body>
+</html>

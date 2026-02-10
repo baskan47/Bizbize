@@ -1,0 +1,21 @@
+
+{
+  "short_name": "StitchSecure",
+  "name": "StitchSecure - E2EE Messenger",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=stitch&backgroundColor=0088cc",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=stitch&backgroundColor=0088cc",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f1c23",
+  "background_color": "#0f1c23"
+}
