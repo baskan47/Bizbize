@@ -1,16 +1,26 @@
 
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="tr" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  
+  <!-- Mobil Uygulama Modu (PWA) Ayarları -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="StitchSecure">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f1c23">
+  
   <link rel="manifest" href="manifest.json">
-  <title>StitchSecure</title>
+  <link rel="apple-touch-icon" href="https://api.dicebear.com/7.x/shapes/svg?seed=stitch&backgroundColor=0088cc">
+  
+  <title>StitchSecure - Güvenli İletişim</title>
+  
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -32,40 +42,42 @@
     }
   </script>
   <style>
+    :root {
+      /* Güvenli alan (çentik) desteği */
+      --sat: env(safe-area-inset-top);
+      --sar: env(safe-area-inset-right);
+      --sab: env(safe-area-inset-bottom);
+      --sal: env(safe-area-inset-left);
+    }
     body {
       background-color: #0b1217;
       color: #e1e7ec;
       overflow: hidden;
-      /* Prevent scrolling bouncing on iOS */
       position: fixed;
       width: 100%;
       height: 100%;
+      /* Çentikli telefonlar için padding */
+      padding-top: var(--sat);
+      padding-bottom: var(--sab);
     }
     #root {
       height: 100%;
       width: 100%;
     }
-    .glass {
-      background: rgba(22, 37, 45, 0.7);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+    /* Mobil cihazlarda dokunma geri bildirimini iyileştir */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input {
+      user-select: text;
     }
     .custom-scrollbar::-webkit-scrollbar {
       width: 4px;
     }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: transparent;
-    }
     .custom-scrollbar::-webkit-scrollbar-thumb {
       background: #2a3d48;
       border-radius: 10px;
-    }
-    @keyframes pulse-glow {
-      0%, 100% { box-shadow: 0 0 5px rgba(0, 136, 204, 0.2); }
-      50% { box-shadow: 0 0 20px rgba(0, 136, 204, 0.6); }
-    }
-    .pulse-glow {
-      animation: pulse-glow 2s infinite;
     }
   </style>
 <script type="importmap">
