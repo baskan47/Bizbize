@@ -44,7 +44,8 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
             name: email.split('@')[0],
             phone: email.trim(),
             status: statusText.trim(),
-            avatarSeed: email.split('@')[0]
+            avatarSeed: email.split('@')[0],
+            userId: '@' + email.split('@')[0].toLowerCase()
           };
 
           if (db) {
@@ -56,8 +57,16 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
                   name: data.name || profile.name,
                   phone: data.phone || profile.phone,
                   status: data.status || profile.status,
-                  avatarSeed: data.avatarSeed || profile.avatarSeed
+                  avatarSeed: data.avatarSeed || profile.avatarSeed,
+                  userId: data.userId || profile.userId
                 };
+              } else {
+                // Create profile in Firestore if it doesn't exist to make sure they are searchable
+                await setDoc(doc(db, 'users', result.user.uid), {
+                  ...profile,
+                  uid: result.user.uid,
+                  createdAt: new Date().toISOString()
+                });
               }
             } catch (err) {
               console.error("Firestore profil yükleme hatası:", err);

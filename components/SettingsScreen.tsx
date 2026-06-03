@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ScreenType } from '../types';
+import { db, auth } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface SettingsProps {
   onNavClick: (screen: ScreenType) => void;
@@ -39,15 +41,31 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
     localStorage.setItem('bizbize_profile', JSON.stringify(profile));
   }, [profile]);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfile({
+    const updatedProfile = {
       name: editName.trim(),
       phone: editPhone.trim(),
       status: editStatus.trim(),
       avatarSeed: editName.trim(),
       userId: editUserId.trim().toLowerCase()
-    });
+    };
+
+    setProfile(updatedProfile);
+
+    // Save to Firestore so other users can search by the new User ID
+    if (db && auth?.currentUser) {
+      try {
+        await setDoc(doc(db, 'users', auth.currentUser.uid), {
+          ...updatedProfile,
+          uid: auth.currentUser.uid,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.error("Firestore profil güncelleme hatası:", err);
+      }
+    }
+
     setShowEditModal(false);
   };
 
