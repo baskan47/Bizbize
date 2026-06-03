@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
 // Create HTTP server
@@ -11,14 +11,14 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 
 // Track active connections by user phone number or ID
-const clients = new Map<string, WebSocket>();
+const clients = new Map();
 
-console.log('Sinyalleşme sunucusu port 8080 üzerinde başlatılıyor...');
+console.log('Sinyalleşme sunucusu başlatılıyor...');
 
 wss.on('connection', (ws) => {
   let clientId = '';
 
-  ws.on('message', (message: string) => {
+  ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
       
@@ -34,7 +34,7 @@ wss.on('connection', (ws) => {
         case 'candidate':
           // Relay WebRTC negotiation data to target user
           const targetWs = clients.get(data.targetId);
-          if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+          if (targetWs && targetWs.readyState === 1) { // 1 is WebSocket.OPEN
             targetWs.send(JSON.stringify({
               ...data,
               senderId: clientId
@@ -47,7 +47,7 @@ wss.on('connection', (ws) => {
 
         case 'hangup':
           const peerWs = clients.get(data.targetId);
-          if (peerWs && peerWs.readyState === WebSocket.OPEN) {
+          if (peerWs && peerWs.readyState === 1) {
             peerWs.send(JSON.stringify({ type: 'hangup', senderId: clientId }));
           }
           break;
