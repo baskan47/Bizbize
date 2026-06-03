@@ -13,13 +13,15 @@ interface UserProfile {
   phone: string;
   avatarSeed: string;
   status: string;
+  userId?: string;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
   name: 'John Doe',
   phone: '+90 (555) 123 4567',
   avatarSeed: 'John',
-  status: 'bizbize ile güvende'
+  status: 'bizbize ile güvende',
+  userId: '@johndoe'
 };
 
 const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hideFooter, onLogout }) => {
@@ -31,6 +33,7 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
   const [editName, setEditName] = useState(profile.name);
   const [editPhone, setEditPhone] = useState(profile.phone);
   const [editStatus, setEditStatus] = useState(profile.status);
+  const [editUserId, setEditUserId] = useState(profile.userId || '@');
 
   useEffect(() => {
     localStorage.setItem('bizbize_profile', JSON.stringify(profile));
@@ -42,7 +45,8 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
       name: editName.trim(),
       phone: editPhone.trim(),
       status: editStatus.trim(),
-      avatarSeed: editName.trim()
+      avatarSeed: editName.trim(),
+      userId: editUserId.trim().toLowerCase()
     });
     setShowEditModal(false);
   };
@@ -67,6 +71,7 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
             setEditName(profile.name);
             setEditPhone(profile.phone);
             setEditStatus(profile.status);
+            setEditUserId(profile.userId || '@');
             setShowEditModal(true);
           }} 
           className="text-primary text-sm font-bold bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-colors"
@@ -85,8 +90,11 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
           </div>
           <div>
             <h2 className="text-xl font-bold">{profile.name}</h2>
-            <p className="text-sm text-slate-400 font-medium">{profile.phone}</p>
-            <p className="text-xs text-slate-500 italic mt-0.5">{profile.status}</p>
+            <div className="flex flex-col mt-0.5">
+              <span className="text-xs font-mono text-primary font-bold">{profile.userId || '@isimsiz'}</span>
+              <span className="text-xs text-slate-400 font-medium">{profile.phone}</span>
+            </div>
+            <p className="text-xs text-slate-500 italic mt-1">{profile.status}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-[10px] text-stitch-green font-bold bg-stitch-green/10 px-2 py-0.5 rounded-full uppercase tracking-widest">Doğrulanmış Hesap</span>
             </div>
@@ -156,6 +164,16 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
                   value={editPhone}
                   onChange={e => setEditPhone(e.target.value)}
                   className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Kullanıcı ID (örn: @can123)</label>
+                <input 
+                  type="text" 
+                  value={editUserId}
+                  onChange={e => setEditUserId(e.target.value.startsWith('@') ? e.target.value : '@' + e.target.value)}
+                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none font-mono"
                   required
                 />
               </div>

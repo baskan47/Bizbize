@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChatItem, ScreenType } from '../types';
 import { db, auth } from '../firebase';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 interface ContactsScreenProps {
   onSelectContact: (chat: ChatItem) => void;
@@ -15,47 +15,18 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
   const [contacts, setContacts] = useState<ChatItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newContactEmail, setNewContactEmail] = useState('');
-  const [newContactName, setNewContactName] = useState('');
+  const [newContactId, setNewContactId] = useState('@');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Fetch registered users dynamically from Firestore
-  const fetchUsers = async () => {
-    if (!db) return;
-    setIsLoading(true);
-    try {
-      const q = collection(db, 'users');
-      const querySnapshot = await getDocs(q);
-      const userList: ChatItem[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Exclude the current logged-in user
-        if (auth?.currentUser && doc.id === auth.currentUser.uid) {
-          return;
-        }
-        userList.push({
-          id: doc.id,
-          name: data.name || 'İsimsiz Kullanıcı',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(data.name || doc.id)}`,
-          lastMessage: data.status || 'bizbize ile güvende',
-          time: '',
-          unreadCount: 0,
-          type: 'user',
-          isOnline: true // Treat as online or customize
-        });
-      });
-      setContacts(userList);
-    } catch (err) {
-      console.error("Kişiler yüklenirken hata:", err);
-    } finally {
-      setIsLoading(false);
-    }
+  // Load added contacts from localStorage
+  const loadLocalContacts = () => {
+    const saved = localStorage.getItem('bizbize_contacts');
+    setContacts(saved ? JSON.parse(saved) : []);
   };
 
   useEffect(() => {
-    fetchUsers();
+    loadLocalContacts();
   }, []);
 
   const filteredContacts = contacts.filter(contact =>
@@ -65,32 +36,97 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
 
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newContactEmail.trim() || !newContactName.trim()) {
-      setErrorMsg('Lütfen tüm alanları doldurun.');
+    if (!newContactId.trim() || newContactId.trim() === '@') {
+      setErrorMsg('Lütfen geçerli bir Kullanıcı ID girin.');
       return;
     }
 
     setIsLoading(true);
     setErrorMsg('');
 
-    // When adding a contact, if we have firebase config, we can check if they exist or register them locally
-    const customContactId = `contact-${Math.random().toString(36).substr(2, 9)}`;
-    const newContact: ChatItem = {
-      id: customContactId,
-      name: newContactName.trim(),
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(newContactName.trim())}`,
-      lastMessage: 'Sohbeti başlatın...',
-      time: 'Şimdi',
-      unreadCount: 0,
-      type: 'user',
-      isOnline: true
-    };
+    const targetId = newContactId.trim().toLowerCase();
 
-    setContacts(prev => [newContact, ...prev]);
-    setNewContactName('');
-    setNewContactEmail('');
-    setShowAddModal(false);
-    setIsLoading(false);
+    if (db) {
+      try {
+        // Query Firestore for users with this userId field
+        const q = query(collection(db, 'users'), where('userId', '==', targetId));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+          setErrorMsg('Bu ID ile eşleşen bir kullanıcı bulunamadı.');
+          setIsLoading(false);
+          return;
+        }
+
+        let foundUser: ChatItem | null = null;
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          // Cannot add yourself
+          if (auth?.currentUser && doc.id === auth.currentUser.uid) {
+            setErrorMsg('Kendinizi arkadaş olarak ekleyemezsiniz.');
+            return;
+          }
+
+          foundUser = {
+            id: doc.id, // This is their real Firebase UID
+            name: data.name || 'İsimsiz Kullanıcı',
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(data.name || doc.id)}`,
+            lastMessage: data.status || 'bizbize ile güvende',
+            time: '',
+            unreadCount: 0,
+            type: 'user',
+            isOnline: true
+          };
+        });
+
+        if (foundUser) {
+          // Check if already in contacts
+          const saved = localStorage.getItem('bizbize_contacts');
+          const currentList: ChatItem[] = saved ? JSON.parse(saved) : [];
+          
+          if (currentList.some(c => c.id === foundUser!.id)) {
+            setErrorMsg('Bu kullanıcı zaten kişilerinizde ekli.');
+            setIsLoading(false);
+            return;
+          }
+
+          const updatedList = [foundUser, ...currentList];
+          localStorage.setItem('bizbize_contacts', JSON.stringify(updatedList));
+          setContacts(updatedList);
+          
+          setNewContactId('@');
+          setShowAddModal(false);
+        }
+      } catch (err) {
+        console.error("Kişi ekleme hatası:", err);
+        setErrorMsg('Bir sunucu hatası oluştu, lütfen tekrar deneyin.');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Mock mode fallback
+      const mockUser: ChatItem = {
+        id: `mock-${Math.random().toString(36).substr(2, 9)}`,
+        name: `Kullanıcı (${targetId})`,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(targetId)}`,
+        lastMessage: 'bizbize ile güvende',
+        time: '',
+        unreadCount: 0,
+        type: 'user',
+        isOnline: true
+      };
+
+      const saved = localStorage.getItem('bizbize_contacts');
+      const currentList: ChatItem[] = saved ? JSON.parse(saved) : [];
+      const updatedList = [mockUser, ...currentList];
+      localStorage.setItem('bizbize_contacts', JSON.stringify(updatedList));
+      setContacts(updatedList);
+      
+      setNewContactId('@');
+      setShowAddModal(false);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -115,7 +151,7 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
           <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
           <input 
             type="text" 
-            placeholder="Kullanıcı adı veya durum ara..."
+            placeholder="Kişilerinizde ara..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full h-11 bg-surface-dark border-none rounded-xl pl-10 pr-4 text-sm focus:ring-1 focus:ring-primary outline-none"
@@ -124,19 +160,14 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
       </header>
 
       <main className="flex-1 overflow-y-auto custom-scrollbar px-4 space-y-2 flex flex-col">
-        {isLoading ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-2">
-            <span className="material-icons-round spin-slow text-3xl text-primary">sync</span>
-            <span className="text-xs">Kişiler yükleniyor...</span>
-          </div>
-        ) : filteredContacts.length === 0 ? (
+        {filteredContacts.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-center p-8">
             <div className="w-16 h-16 bg-surface-dark rounded-full flex items-center justify-center mb-4 border border-white/5">
               <span className="material-icons-round text-3xl text-slate-600">people_outline</span>
             </div>
-            <p className="text-sm font-bold text-slate-400">Henüz Kayıtlı Kullanıcı Yok</p>
+            <p className="text-sm font-bold text-slate-400">Henüz Kişi Eklenmemiş</p>
             <p className="text-xs text-slate-500 max-w-[220px] mt-2 leading-relaxed">
-              Farklı bir cihaz veya tarayıcıdan yeni bir hesap oluşturulduğunda burada görünecektir.
+              Arkadaş eklemek ve sohbet başlatmak için sağ üstteki artı butonuna basıp Kullanıcı ID'sini (@) girin.
             </p>
           </div>
         ) : (
@@ -195,32 +226,22 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">
           <div className="bg-surface-dark rounded-[2rem] p-8 max-w-sm w-full border border-white/10 shadow-2xl animate-slide-up">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold">Yeni Sohbet Başlat</h3>
+              <h3 className="text-lg font-bold">Arkadaş Ekle</h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-500 hover:text-white">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <form onSubmit={handleAddContact} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Kullanıcı Adı</label>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Kullanıcı ID (örn: @can123)</label>
                 <input 
                   type="text" 
-                  value={newContactName}
-                  onChange={e => setNewContactName(e.target.value)}
-                  placeholder="Can Demir"
-                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                  value={newContactId}
+                  onChange={e => setNewContactId(e.target.value.startsWith('@') ? e.target.value : '@' + e.target.value)}
+                  placeholder="@kullanici"
+                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none font-mono text-primary font-bold"
                   required
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">E-posta</label>
-                <input 
-                  type="email" 
-                  value={newContactEmail}
-                  onChange={e => setNewContactEmail(e.target.value)}
-                  placeholder="can@bizbize.com"
-                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none"
-                  required
+                  autoFocus
                 />
               </div>
               {errorMsg && <p className="text-xs text-red-500 font-bold">{errorMsg}</p>}
@@ -229,7 +250,7 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
                 disabled={isLoading}
                 className="w-full bg-primary hover:bg-primary/95 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary/20 transition-all mt-4 flex items-center justify-center gap-2"
               >
-                {isLoading ? 'Ekleniyor...' : 'Sohbet Başlat'}
+                {isLoading ? 'Aranıyor...' : 'Arkadaş Ekle'}
               </button>
             </form>
           </div>

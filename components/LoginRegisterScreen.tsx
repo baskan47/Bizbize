@@ -17,6 +17,7 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [userId, setUserId] = useState('');
   const [statusText, setStatusText] = useState('bizbize ile güvende');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -112,7 +113,8 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
       name: name.trim(),
       phone: email.trim(),
       status: statusText.trim(),
-      avatarSeed: name.trim()
+      avatarSeed: name.trim(),
+      userId: userId.trim().toLowerCase()
     };
 
     if (hasFirebaseConfig && db && auth?.currentUser) {
@@ -265,6 +267,18 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
                   className="w-full bg-background-dark border border-white/5 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all"
                   required
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Kullanıcı ID (örn: @can123)</label>
+                <input 
+                  type="text" 
+                  value={userId}
+                  onChange={e => setUserId(e.target.value.startsWith('@') ? e.target.value : '@' + e.target.value)}
+                  placeholder="@kullanici"
+                  className="w-full bg-background-dark border border-white/5 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all font-mono"
+                  required
                 />
               </div>
 

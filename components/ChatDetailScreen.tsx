@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatItem, Message, CallType } from '../types';
 import { GoogleGenAI } from '@google/genai';
 import { saveMessageToDb, subscribeToMessages } from '../db';
+import { auth } from '../firebase';
 
 interface ChatDetailProps {
   chat: ChatItem;
@@ -22,18 +23,28 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Deterministic Chat ID for E2EE database synchronization
+  const myUid = auth?.currentUser?.uid || 'me';
+  const targetUid = chat.id;
+  const deterministicChatId = [myUid, targetUid].sort().join('_');
+
   // E2EE secret key unique to this chat
-  const secretKey = `bizbize-secret-${chat.id}`;
+  const secretKey = `bizbize-secret-${deterministicChatId}`;
 
   // Subscribe to real-time messages from database
   useEffect(() => {
-    const unsubscribe = subscribeToMessages(chat.id, secretKey, (updatedMsgs) => {
-      setMessages(updatedMsgs);
+    const unsubscribe = subscribeToMessages(deterministicChatId, secretKey, (updatedMsgs) => {
+      // Mark messages that are not sent by me as not isMe (so they align left)
+      const formattedMsgs = updatedMsgs.map(msg => ({
+        ...msg,
+        isMe: msg.senderId === myUid || msg.isMe && msg.senderId === 'me'
+      }));
+      setMessages(formattedMsgs);
     });
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [chat.id, secretKey]);
+  }, [deterministicChatId, secretKey, myUid]);
 
   useEffect(() => {
     onUpdateMessages(messages);
@@ -50,7 +61,7 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
 
     const userMsg: Message = {
       id: Math.random().toString(36).substr(2, 9),
-      senderId: 'me',
+      senderId: myUid,
       text: inputText,
       type: 'text',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -58,55 +69,9 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
       status: 'sent'
     };
 
-    // Save to E2EE Database (either Firebase or LocalStorage fallback)
-    await saveMessageToDb(chat.id, userMsg, secretKey);
     setInputText('');
-    setIsTyping(true);
-
-    // AI Response Simulation with fallback in case of API Key failure
-    setTimeout(async () => {
-      let responseText = '';
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
-
-      if (apiKey && apiKey !== 'PLACEHOLDER_API_KEY') {
-        try {
-          const ai = new GoogleGenAI({ apiKey });
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `Kullanıcı bizbize uygulamasında mesaj gönderdi: "${inputText}". Sen ${chat.name} adlı sohbet ortağısın. Samimi, kısa ve Türkçe bir yanıt ver.`,
-          });
-          responseText = response.text || '';
-        } catch (err) {
-          console.error("Gemini API Error, falling back to simulated response:", err);
-        }
-      }
-
-      // Fallback response generator if API fails or key is missing
-      if (!responseText) {
-        const fallbacks = [
-          "Harika bir fikir! Detayları konuşalım.",
-          "Anladım, bunu en kısa sürede hallediyorum.",
-          "Tamamdır, yarın sabah ilk iş olarak ilgileneceğim.",
-          "Ses dosyasını veya belgeleri kontrol ettin mi?",
-          "Harika! Başka bir gelişme var mı?",
-          "Katılıyorum, bizbize üzerinden güvenli şekilde devam edelim."
-        ];
-        responseText = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-      }
-
-      const aiMsg: Message = {
-        id: Math.random().toString(36).substr(2, 9),
-        senderId: 'ai',
-        text: responseText,
-        type: 'text',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isMe: false,
-        status: 'read'
-      };
-
-      await saveMessageToDb(chat.id, aiMsg, secretKey);
-      setIsTyping(false);
-    }, 1200);
+    // Save to E2EE Database using the deterministic chatId
+    await saveMessageToDb(deterministicChatId, userMsg, secretKey);
   };
 
   const handleTranscript = async (msgId: string) => {
@@ -135,8 +100,7 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
     const targetMsg = messages.find(m => m.id === msgId);
     if (targetMsg) {
       const updatedMsg = { ...targetMsg, transcript: transcriptText };
-      // Save updated message back to simulate db edit
-      await saveMessageToDb(chat.id, updatedMsg, secretKey);
+      await saveMessageToDb(deterministicChatId, updatedMsg, secretKey);
     }
     setIsTranscribing(null);
   };
