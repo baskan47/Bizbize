@@ -1,70 +1,183 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenType } from '../types';
 
 interface SettingsProps {
   onNavClick: (screen: ScreenType) => void;
   activeScreen: ScreenType;
   hideFooter?: boolean;
+  onLogout?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hideFooter }) => {
+interface UserProfile {
+  name: string;
+  phone: string;
+  avatarSeed: string;
+  status: string;
+}
+
+const DEFAULT_PROFILE: UserProfile = {
+  name: 'John Doe',
+  phone: '+90 (555) 123 4567',
+  avatarSeed: 'John',
+  status: 'bizbize ile güvende'
+};
+
+const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hideFooter, onLogout }) => {
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    const saved = localStorage.getItem('bizbize_profile');
+    return saved ? JSON.parse(saved) : DEFAULT_PROFILE;
+  });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState(profile.name);
+  const [editPhone, setEditPhone] = useState(profile.phone);
+  const [editStatus, setEditStatus] = useState(profile.status);
+
+  useEffect(() => {
+    localStorage.setItem('bizbize_profile', JSON.stringify(profile));
+  }, [profile]);
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfile({
+      name: editName.trim(),
+      phone: editPhone.trim(),
+      status: editStatus.trim(),
+      avatarSeed: editName.trim()
+    });
+    setShowEditModal(false);
+  };
+
+  const handleSignOut = () => {
+    if (confirm("Güvenli oturumu kapatmak istediğinize emin misiniz? Tüm geçici anahtarlarınız silinecektir.")) {
+      localStorage.removeItem('bizbize_profile');
+      setProfile(DEFAULT_PROFILE);
+      alert("Güvenli oturum kapatıldı.");
+      if (onLogout) {
+        onLogout();
+      }
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col pt-8 bg-background-dark">
+    <div className="h-full flex flex-col pt-8 bg-background-dark text-white">
       <header className="px-8 mb-8 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <button className="text-primary text-sm font-bold bg-primary/10 px-4 py-2 rounded-xl">Edit Profile</button>
+        <h1 className="text-2xl font-bold">Ayarlar</h1>
+        <button 
+          onClick={() => {
+            setEditName(profile.name);
+            setEditPhone(profile.phone);
+            setEditStatus(profile.status);
+            setShowEditModal(true);
+          }} 
+          className="text-primary text-sm font-bold bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-colors"
+        >
+          Profili Düzenle
+        </button>
       </header>
 
       <main className="flex-1 overflow-y-auto custom-scrollbar px-6 space-y-8 pb-10">
         <div className="flex items-center gap-5 p-6 bg-surface-dark rounded-[2rem] border border-white/5 shadow-2xl">
           <div className="relative">
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Me" className="w-20 h-20 rounded-full border-4 border-primary/20 shadow-xl" alt="Me" />
+            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(profile.avatarSeed)}`} className="w-20 h-20 rounded-full border-4 border-primary/20 shadow-xl bg-slate-700" alt="Profilim" />
             <div className="absolute bottom-0 right-0 w-7 h-7 bg-primary rounded-full flex items-center justify-center border-2 border-surface-dark shadow-lg">
-              <span className="material-icons-round text-white text-[14px]">camera_alt</span>
+              <span className="material-icons-round text-white text-[14px]">verified</span>
             </div>
           </div>
           <div>
-            <h2 className="text-xl font-bold">John Doe</h2>
-            <p className="text-sm text-slate-400 font-medium">+1 (555) 000-1234</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] text-stitch-green font-bold bg-stitch-green/10 px-2 py-0.5 rounded-full uppercase tracking-widest">Verified User</span>
+            <h2 className="text-xl font-bold">{profile.name}</h2>
+            <p className="text-sm text-slate-400 font-medium">{profile.phone}</p>
+            <p className="text-xs text-slate-500 italic mt-0.5">{profile.status}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] text-stitch-green font-bold bg-stitch-green/10 px-2 py-0.5 rounded-full uppercase tracking-widest">Doğrulanmış Hesap</span>
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
-          <SectionTitle>Security & Privacy</SectionTitle>
+          <SectionTitle>Güvenlik & Gizlilik</SectionTitle>
           <div className="bg-surface-dark rounded-3xl overflow-hidden border border-white/5 shadow-xl">
-            <SettingsItem icon="lock" label="Privacy Settings" detail="Strict" color="text-stitch-green" />
-            <SettingsItem icon="fingerprint" label="Biometric Unlock" detail="FaceID On" />
-            <SettingsItem icon="history" label="Auto-Delete History" detail="30 Days" />
-            <SettingsItem icon="vpn_key" label="Secret Keys" detail="Managed" />
+            <SettingsItem icon="lock" label="Gizlilik Ayarları" detail="Sıkı" color="text-stitch-green" />
+            <SettingsItem icon="fingerprint" label="Biyometrik Kilit" detail="Yüz Tanıma Açık" />
+            <SettingsItem icon="history" label="Sohbeti Otomatik Sil" detail="30 Gün" />
+            <SettingsItem icon="vpn_key" label="Güvenlik Anahtarlarım" detail="Yönetiliyor" />
           </div>
 
-          <SectionTitle>Preferences</SectionTitle>
+          <SectionTitle>Tercihler</SectionTitle>
           <div className="bg-surface-dark rounded-3xl overflow-hidden border border-white/5 shadow-xl">
-            <SettingsItem icon="palette" label="App Theme" detail="Dark Nebula" />
-            <SettingsItem icon="notifications_active" label="Push Notifications" detail="Summary" />
-            <SettingsItem icon="language" label="Language" detail="Turkish" />
+            <SettingsItem icon="palette" label="Uygulama Teması" detail="Karanlık Nebula" />
+            <SettingsItem icon="notifications_active" label="Bildirim Ayarları" detail="Özetler Açık" />
+            <SettingsItem icon="language" label="Dil / Language" detail="Türkçe" />
           </div>
 
-          <SectionTitle>Account Actions</SectionTitle>
+          <SectionTitle>Hesap İşlemleri</SectionTitle>
           <div className="bg-surface-dark rounded-3xl overflow-hidden border border-white/5 shadow-xl">
-            <SettingsItem icon="devices" label="Linked Devices" detail="4 active" />
-            <SettingsItem icon="cloud_download" label="Export My Data" />
-            <SettingsItem icon="logout" label="Secure Sign Out" color="text-red-500" last />
+            <SettingsItem icon="devices" label="Bağlı Cihazlar" detail="4 Aktif" />
+            <SettingsItem icon="cloud_download" label="Verilerimi Dışa Aktar" />
+            <div onClick={handleSignOut}>
+              <SettingsItem icon="logout" label="Güvenli Çıkış Yap" color="text-red-500" last />
+            </div>
           </div>
         </div>
       </main>
 
       {!hideFooter && (
         <footer className="h-20 bg-background-dark/80 backdrop-blur-xl border-t border-white/5 flex items-center justify-around px-4 pb-4">
-          <NavButton icon="chat_bubble" label="Chats" active={activeScreen === ScreenType.CHAT_LIST} onClick={() => onNavClick(ScreenType.CHAT_LIST)} />
-          <NavButton icon="explore" label="Discovery" active={activeScreen === ScreenType.DISCOVERY} onClick={() => onNavClick(ScreenType.DISCOVERY)} />
-          <NavButton icon="people" label="Contacts" active={false} onClick={() => {}} />
-          <NavButton icon="settings" label="Settings" active={activeScreen === ScreenType.SETTINGS} onClick={() => onNavClick(ScreenType.SETTINGS)} />
+          <NavButton icon="chat_bubble" label="Mesajlar" active={activeScreen === ScreenType.CHAT_LIST} onClick={() => onNavClick(ScreenType.CHAT_LIST)} />
+          <NavButton icon="explore" label="Keşfet" active={activeScreen === ScreenType.DISCOVERY} onClick={() => onNavClick(ScreenType.DISCOVERY)} />
+          <NavButton icon="people" label="Kişiler" active={activeScreen === ScreenType.CONTACTS} onClick={() => onNavClick(ScreenType.CONTACTS)} />
+          <NavButton icon="settings" label="Ayarlar" active={activeScreen === ScreenType.SETTINGS} onClick={() => onNavClick(ScreenType.SETTINGS)} />
         </footer>
+      )}
+
+      {showEditModal && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="bg-surface-dark rounded-[2rem] p-8 max-w-sm w-full border border-white/10 shadow-2xl animate-slide-up">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold">Profili Düzenle</h3>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-500 hover:text-white">
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Ad Soyad</label>
+                <input 
+                  type="text" 
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Telefon Numarası</label>
+                <input 
+                  type="tel" 
+                  value={editPhone}
+                  onChange={e => setEditPhone(e.target.value)}
+                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Durum Mesajı</label>
+                <input 
+                  type="text" 
+                  value={editStatus}
+                  onChange={e => setEditStatus(e.target.value)}
+                  className="w-full bg-background-dark border border-white/5 rounded-xl px-4 py-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                  required
+                />
+              </div>
+              <button 
+                type="submit" 
+                className="w-full bg-primary hover:bg-primary/95 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary/20 transition-all mt-4"
+              >
+                Değişiklikleri Kaydet
+              </button>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -90,7 +203,7 @@ const SettingsItem: React.FC<{ icon: string; label: string; detail?: string; col
 );
 
 const NavButton: React.FC<{ icon: string; label: string; active: boolean; onClick: () => void }> = ({ icon, label, active, onClick }) => (
-  <button onClick={onClick} className={`flex flex-col items-center gap-0.5 transition-colors ${active ? 'text-primary' : 'text-slate-500'}`}>
+  <button onClick={onClick} className={`flex flex-col items-center gap-0.5 transition-colors ${active ? 'text-primary' : 'text-slate-500 hover:text-slate-300'}`}>
     <span className="material-icons-round">{icon}</span>
     <span className="text-[10px] font-bold">{label}</span>
   </button>

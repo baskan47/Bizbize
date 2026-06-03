@@ -6,7 +6,8 @@ export enum ScreenType {
   ATTACHMENTS = 'ATTACHMENTS',
   DISCOVERY = 'DISCOVERY',
   SETTINGS = 'SETTINGS',
-  CALLING = 'CALLING'
+  CALLING = 'CALLING',
+  CONTACTS = 'CONTACTS'
 }
 
 export enum ChatCategory {
@@ -39,7 +40,7 @@ export interface Message {
   id: string;
   senderId: string;
   text?: string;
-  type: 'text' | 'voice' | 'ephemeral' | 'poll' | 'file';
+  type: 'text' | 'voice' | 'ephemeral' | 'poll' | 'file' | 'image';
   timestamp: string;
   isMe: boolean;
   status: 'sent' | 'delivered' | 'read';
@@ -49,4 +50,6 @@ export interface Message {
   poll?: PollData;
   fileName?: string;
   isZipped?: boolean;
+  imageUrl?: string;
+  imageCaption?: string;
 }

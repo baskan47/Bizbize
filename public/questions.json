@@ -1,0 +1,146 @@
+[
+    {
+        "id": 1,
+        "difficulty": "easy",
+        "question": "Ramazan ayı, İslam takvimine göre kaçıncı aydır?",
+        "options": [
+            "7. Ay",
+            "8. Ay",
+            "9. Ay",
+            "10. Ay"
+        ],
+        "correctIndex": 2
+    },
+    {
+        "id": 2,
+        "difficulty": "easy",
+        "question": "İftar, günün hangi vaktinde yapılır?",
+        "options": [
+            "Öğle namazından sonra",
+            "Güneş battıktan sonra",
+            "Gece yarısı",
+            "Sabah namazından önce"
+        ],
+        "correctIndex": 1
+    },
+    {
+        "id": 3,
+        "difficulty": "easy",
+        "question": "Ramazan ayının son on gününde aranılan mübarek gece hangisidir?",
+        "options": [
+            "Miraç Kandili",
+            "Kadir Gecesi",
+            "Berat Kandili",
+            "Regaip Kandili"
+        ],
+        "correctIndex": 1
+    },
+    {
+        "id": 4,
+        "difficulty": "easy",
+        "question": "Sahur, günün hangi vaktinde yapılır?",
+        "options": [
+            "Gece yarısı",
+            "Öğleden önce",
+            "Fecirden önce",
+            "Akşam namazından sonra"
+        ],
+        "correctIndex": 2
+    },
+    {
+        "id": 5,
+        "difficulty": "easy",
+        "question": "Ramazan ayı boyunca her gün kaç vakit namaz kılınır?",
+        "options": [
+            "3",
+            "4",
+            "5",
+            "6"
+        ],
+        "correctIndex": 2
+    },
+    {
+        "id": 6,
+        "difficulty": "medium",
+        "question": "Müslümanların ilk hicret ettiği yer olan Habeşistan'ın bugünkü adı nedir?",
+        "options": [
+            "Mısır",
+            "Etiyopya",
+            "Sudan",
+            "Yemen"
+        ],
+        "correctIndex": 1
+    },
+    {
+        "id": 7,
+        "difficulty": "medium",
+        "question": "Kur'an-ı Kerim hangi ayda indirilmeye başlanmıştır?",
+        "options": [
+            "Muharrem",
+            "Recep",
+            "Ramazan",
+            "Şaban"
+        ],
+        "correctIndex": 2
+    },
+    {
+        "id": 8,
+        "difficulty": "medium",
+        "question": "Ramazan Bayramı kaç gün sürer?",
+        "options": [
+            "1 gün",
+            "2 gün",
+            "3 gün",
+            "4 gün"
+        ],
+        "correctIndex": 2
+    },
+    {
+        "id": 9,
+        "difficulty": "medium",
+        "question": "Teravih namazı kaç rekattır (en yaygın uygulamaya göre)?",
+        "options": [
+            "8 rekat",
+            "12 rekat",
+            "16 rekat",
+            "20 rekat"
+        ],
+        "correctIndex": 3
+    },
+    {
+        "id": 10,
+        "difficulty": "medium",
+        "question": "Ramazan orucunu bozan şeylerden biri hangisidir?",
+        "options": [
+            "Uyumak",
+            "Diş fırçalamak",
+            "Bilerek yemek içmek",
+            "Kan aldırmak"
+        ],
+        "correctIndex": 2
+    },
+    {
+        "id": 11,
+        "difficulty": "hard",
+        "question": "Hz. Muhammed (s.a.v.) ilk vahyi hangi mağarada almıştır?",
+        "options": [
+            "Mağara-i Sevr",
+            "Hira Mağarası",
+            "Uhud Mağarası",
+            "Mağara-i Kubâ"
+        ],
+        "correctIndex": 1
+    },
+    {
+        "id": 12,
+        "difficulty": "hard",
+        "question": "Kadir Gecesi'nin Kur'an'da geçtiği sure hangisidir ve kaç ayettir?",
+        "options": [
+            "Kadr Suresi - 3 ayet",
+            "Kadr Suresi - 5 ayet",
+            "Duhân Suresi - 7 ayet",
+            "Bakara Suresi - 185. ayet"
+        ],
+        "correctIndex": 1
+    }
+]

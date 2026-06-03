@@ -1,21 +1,29 @@
-
 {
-  "short_name": "StitchSecure",
-  "name": "StitchSecure - E2EE Messenger",
+  "short_name": "bizbize",
+  "name": "bizbize - Güvenli Sohbet",
+  "description": "Uçtan uca şifreli güvenli mesajlaşma uygulaması",
   "icons": [
     {
-      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=stitch&backgroundColor=0088cc",
+      "src": "/icon-192.svg",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=stitch&backgroundColor=0088cc",
+      "src": "/icon-512.svg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "theme_color": "#0f1c23",
-  "background_color": "#0f1c23"
+  "background_color": "#0f1c23",
+  "categories": [
+    "social",
+    "communication"
+  ],
+  "screenshots": []
 }
