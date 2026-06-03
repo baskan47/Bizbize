@@ -31,27 +31,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [selectedChat, currentScreen]);
 
-  // Simulated Incoming Call after 25 seconds of inactivity on Chat List
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const timer = setTimeout(() => {
-      if (currentScreen === ScreenType.CHAT_LIST && !activeCall) {
-        const caller: ChatItem = {
-          id: 'caller-sim',
-          name: 'Sarah Jenkins',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-          lastMessage: '',
-          time: 'Şimdi',
-          unreadCount: 0,
-          type: 'user'
-        };
-        setActiveCall({ type: 'video', chat: caller, isIncoming: true });
-        setCurrentScreen(ScreenType.CALLING);
-      }
-    }, 25000);
-    return () => clearTimeout(timer);
-  }, [currentScreen, activeCall, isAuthenticated]);
-
   const handleLoginSuccess = (profile: { name: string; phone: string; status: string; avatarSeed: string }) => {
     localStorage.setItem('bizbize_profile', JSON.stringify(profile));
     setIsAuthenticated(true);
@@ -65,6 +44,15 @@ const App: React.FC = () => {
 
   const navigateToChat = (chat: ChatItem) => {
     setSelectedChat(chat);
+    
+    // Add to active chats list in localStorage
+    const savedChats = localStorage.getItem('bizbize_active_chats');
+    const activeChats: ChatItem[] = savedChats ? JSON.parse(savedChats) : [];
+    if (!activeChats.some(c => c.id === chat.id)) {
+      const updated = [chat, ...activeChats];
+      localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+    }
+
     if (!isLargeScreen) {
       setCurrentScreen(ScreenType.CHAT_DETAIL);
     } else {

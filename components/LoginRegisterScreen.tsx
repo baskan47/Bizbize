@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { auth, hasFirebaseConfig } from '../firebase';
+import { auth, db, hasFirebaseConfig } from '../firebase';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword 
 } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 interface LoginRegisterScreenProps {
   onLoginSuccess: (profile: { name: string; phone: string; status: string; avatarSeed: string }) => void;
@@ -38,14 +39,31 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
           setStep('profile');
         } else {
           const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-          setIsLoading(false);
-          // If login is successful, pass details (email as phone representation or retrieve name)
-          onLoginSuccess({
+          let profile = {
             name: email.split('@')[0],
             phone: email.trim(),
             status: statusText.trim(),
             avatarSeed: email.split('@')[0]
-          });
+          };
+
+          if (db) {
+            try {
+              const docSnap = await getDoc(doc(db, 'users', result.user.uid));
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                profile = {
+                  name: data.name || profile.name,
+                  phone: data.phone || profile.phone,
+                  status: data.status || profile.status,
+                  avatarSeed: data.avatarSeed || profile.avatarSeed
+                };
+              }
+            } catch (err) {
+              console.error("Firestore profil yükleme hatası:", err);
+            }
+          }
+          setIsLoading(false);
+          onLoginSuccess(profile);
         }
       } catch (err: any) {
         console.error("Firebase Auth Hatası:", err);
@@ -82,19 +100,35 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
     }
   };
 
-  const handleProfileSubmit = (e: React.FormEvent) => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setErrorMsg('Lütfen adınızı girin.');
       return;
     }
-
-    onLoginSuccess({
+    
+    setIsLoading(true);
+    const profile = {
       name: name.trim(),
       phone: email.trim(),
       status: statusText.trim(),
       avatarSeed: name.trim()
-    });
+    };
+
+    if (hasFirebaseConfig && db && auth?.currentUser) {
+      try {
+        await setDoc(doc(db, 'users', auth.currentUser.uid), {
+          ...profile,
+          uid: auth.currentUser.uid,
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Firestore profil kaydetme hatası:", err);
+      }
+    }
+
+    setIsLoading(false);
+    onLoginSuccess(profile);
   };
 
   return (

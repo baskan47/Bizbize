@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChatItem, ChatCategory, ScreenType } from '../types';
 
 interface ChatListProps {
@@ -11,21 +11,25 @@ interface ChatListProps {
   selectedChatId?: string;
 }
 
-const MOCK_CHATS: ChatItem[] = [
-  { id: '1', name: 'Alex Rivera', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex', lastMessage: 'Saat 8\'de görüşürüz, belgeleri unutma!', time: '12:45', unreadCount: 2, type: 'user', isOnline: true },
-  { id: '2', name: 'Tasarım Ekibi 🚀', avatar: 'https://api.dicebear.com/7.x/identicon/svg?seed=Design', lastMessage: 'Caner: Yeni tasarımlar yüklendi...', time: '10:12', unreadCount: 0, type: 'group' },
-  { id: '3', name: 'Haftalık Teknoloji', avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=TN', lastMessage: 'Apple yeni işlemcisini duyurdu...', time: '09:30', unreadCount: 5, type: 'channel', isVerified: true },
-  { id: '4', name: 'Sarah Jenkins', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', lastMessage: 'Toplantı ertelendi.', time: 'Dün', unreadCount: 0, type: 'user' },
-  { id: '5', name: 'Marcus Aurelius', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus', lastMessage: 'Geri bildirim için teşekkürler!', time: 'Salı', unreadCount: 0, type: 'user' },
-];
-
 const ChatListScreen: React.FC<ChatListProps> = ({ onSelectChat, onDiscovery, onNavClick, activeScreen, hideFooter, selectedChatId }) => {
   const [activeTab, setActiveTab] = useState<ChatCategory>(ChatCategory.ALL);
   const [searchQuery, setSearchQuery] = useState('');
+  const [chats, setChats] = useState<ChatItem[]>([]);
 
-  const filteredChats = MOCK_CHATS.filter(chat => {
+  useEffect(() => {
+    const loadChats = () => {
+      const saved = localStorage.getItem('bizbize_active_chats');
+      setChats(saved ? JSON.parse(saved) : []);
+    };
+    loadChats();
+    // Refresh chats whenever the window receives focus or local storage changes
+    window.addEventListener('focus', loadChats);
+    return () => window.removeEventListener('focus', loadChats);
+  }, []);
+
+  const filteredChats = chats.filter(chat => {
     const matchesSearch = chat.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
+                          (chat.lastMessage && chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()));
     if (!matchesSearch) return false;
     
     if (activeTab === ChatCategory.ALL) return true;
@@ -67,38 +71,50 @@ const ChatListScreen: React.FC<ChatListProps> = ({ onSelectChat, onDiscovery, on
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto custom-scrollbar px-2">
-        <div className="space-y-1">
-          {filteredChats.map(chat => (
-            <div 
-              key={chat.id}
-              onClick={() => onSelectChat(chat)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all ${selectedChatId === chat.id ? 'bg-primary/20 shadow-lg' : 'hover:bg-white/5'}`}
-            >
-              <div className="relative flex-shrink-0">
-                <img src={chat.avatar} className="w-12 h-12 rounded-full border border-white/10 bg-slate-700" alt={chat.name} />
-                {chat.isOnline && <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-stitch-green border-2 border-background-dark rounded-full"></div>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-center mb-0.5">
-                  <h3 className={`font-bold text-sm truncate flex items-center gap-1 ${selectedChatId === chat.id ? 'text-white' : 'text-slate-200'}`}>
-                    {chat.name}
-                    {chat.isVerified && <span className="material-icons-round text-primary text-[14px]">verified</span>}
-                  </h3>
-                  <span className="text-[10px] text-slate-500">{chat.time}</span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <p className="text-xs text-slate-400 truncate flex-1">{chat.lastMessage}</p>
-                  {chat.unreadCount > 0 && (
-                    <span className="bg-primary text-white text-[10px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center animate-pulse">
-                      {chat.unreadCount}
-                    </span>
-                  )}
-                </div>
-              </div>
+      <main className="flex-1 overflow-y-auto custom-scrollbar px-2 flex flex-col">
+        {filteredChats.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-center p-8">
+            <div className="w-16 h-16 bg-surface-dark rounded-full flex items-center justify-center mb-4 border border-white/5">
+              <span className="material-icons-round text-3xl text-slate-600">chat_bubble_outline</span>
             </div>
-          ))}
-        </div>
+            <p className="text-sm font-bold text-slate-400">Henüz Sohbet Yok</p>
+            <p className="text-xs text-slate-500 max-w-[220px] mt-2 leading-relaxed">
+              Kişiler sekmesinden diğer kayıtlı kullanıcıları arayıp sohbet başlatabilirsiniz.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {filteredChats.map(chat => (
+              <div 
+                key={chat.id}
+                onClick={() => onSelectChat(chat)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all ${selectedChatId === chat.id ? 'bg-primary/20 shadow-lg' : 'hover:bg-white/5'}`}
+              >
+                <div className="relative flex-shrink-0">
+                  <img src={chat.avatar} className="w-12 h-12 rounded-full border border-white/10 bg-slate-700" alt={chat.name} />
+                  {chat.isOnline && <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-stitch-green border-2 border-background-dark rounded-full"></div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-center mb-0.5">
+                    <h3 className={`font-bold text-sm truncate flex items-center gap-1 ${selectedChatId === chat.id ? 'text-white' : 'text-slate-200'}`}>
+                      {chat.name}
+                      {chat.isVerified && <span className="material-icons-round text-primary text-[14px]">verified</span>}
+                    </h3>
+                    <span className="text-[10px] text-slate-500">{chat.time}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <p className="text-xs text-slate-400 truncate flex-1">{chat.lastMessage}</p>
+                    {chat.unreadCount > 0 && (
+                      <span className="bg-primary text-white text-[10px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center animate-pulse">
+                        {chat.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
       {!hideFooter && (
