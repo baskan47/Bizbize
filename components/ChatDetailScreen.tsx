@@ -3,7 +3,7 @@ import { ChatItem, Message, CallType } from '../types';
 import { GoogleGenAI } from '@google/genai';
 import { saveMessageToDb, subscribeToMessages } from '../db';
 import { auth, db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 interface ChatDetailProps {
   chat: ChatItem;
@@ -24,10 +24,17 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Group settings panel states
+  const [showGroupSettings, setShowGroupSettings] = useState(false);
+  const [memberDetails, setMemberDetails] = useState<{ id: string; name: string; avatar: string }[]>([]);
+  const [editGroupName, setEditGroupName] = useState(chat.name);
+  const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
+  const [groupUpdateMsg, setGroupUpdateMsg] = useState('');
+
   // Deterministic Chat ID for E2EE database synchronization
   const myUid = auth?.currentUser?.uid || 'me';
   const targetUid = chat.id;
-  const deterministicChatId = [myUid, targetUid].sort().join('_');
+  const deterministicChatId = chat.type === 'group' ? chat.id : [myUid, targetUid].sort().join('_');
 
   // E2EE secret key unique to this chat
   const secretKey = `bizbize-secret-${deterministicChatId}`;
@@ -57,6 +64,192 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
     }
   }, [messages, isTyping]);
 
+  useEffect(() => {
+    setEditGroupName(chat.name);
+    setShowGroupSettings(false);
+    setGroupUpdateMsg('');
+  }, [chat.id, chat.name]);
+
+  useEffect(() => {
+    if (chat.type !== 'group' || !showGroupSettings) return;
+    
+    const fetchMembers = async () => {
+      const details: { id: string; name: string; avatar: string }[] = [];
+      const savedContacts = JSON.parse(localStorage.getItem('bizbize_contacts') || '[]');
+      const myProfile = JSON.parse(localStorage.getItem('bizbize_profile') || '{}');
+      
+      const currentMembers = chat.members || [myUid];
+      for (const mId of currentMembers) {
+        if (mId === myUid) {
+          details.push({
+            id: myUid,
+            name: (myProfile.name || 'Ben') + ' (Siz)',
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(myProfile.name || 'me')}`
+          });
+          continue;
+        }
+        
+        const localMatch = savedContacts.find((c: any) => c.id === mId);
+        if (localMatch) {
+          details.push({
+            id: localMatch.id,
+            name: localMatch.name,
+            avatar: localMatch.avatar
+          });
+          continue;
+        }
+
+        if (db) {
+          try {
+            const docSnap = await getDoc(doc(db, 'users', mId));
+            if (docSnap.exists()) {
+              const docData = docSnap.data();
+              details.push({
+                id: mId,
+                name: docData.name || mId,
+                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(docData.name || mId)}`
+              });
+              continue;
+            }
+          } catch (err) {
+            console.error("Grup üyesi yükleme hatası:", err);
+          }
+        }
+
+        details.push({
+          id: mId,
+          name: `Kullanıcı (${mId.slice(0, 5)})`,
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(mId)}`
+        });
+      }
+      setMemberDetails(details);
+    };
+
+    fetchMembers();
+  }, [chat.members, showGroupSettings, myUid]);
+
+  const handleUpdateGroupProfile = async () => {
+    if (!editGroupName.trim()) return;
+    setIsUpdatingGroup(true);
+    setGroupUpdateMsg('');
+
+    const newAvatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(editGroupName.trim())}`;
+    const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const updatedTimeIso = new Date().toISOString();
+    const updatedMembers = chat.members || [myUid];
+
+    if (db) {
+      try {
+        // 1. Update central groups entry
+        await setDoc(doc(db, 'groups', chat.id), {
+          name: editGroupName.trim(),
+          avatar: newAvatar,
+        }, { merge: true });
+
+        // 2. Update active chats for all members
+        for (const memberId of updatedMembers) {
+          await setDoc(doc(db, 'users', memberId, 'active_chats', chat.id), {
+            name: editGroupName.trim(),
+            avatar: newAvatar,
+            lastMessage: 'Grup profili güncellendi',
+            time: timestampStr,
+            updatedAt: updatedTimeIso
+          }, { merge: true });
+        }
+        
+        chat.name = editGroupName.trim();
+        chat.avatar = newAvatar;
+        setGroupUpdateMsg('Grup başarıyla güncellendi!');
+      } catch (err: any) {
+        console.error("Grup güncelleme hatası:", err);
+        setGroupUpdateMsg('Hata: ' + (err.message || err));
+      } finally {
+        setIsUpdatingGroup(false);
+      }
+    } else {
+      // Mock local storage update
+      const savedChats = localStorage.getItem('bizbize_active_chats');
+      if (savedChats) {
+        const activeChats: ChatItem[] = JSON.parse(savedChats);
+        const updated = activeChats.map(c => {
+          if (c.id === chat.id) {
+            return {
+              ...c,
+              name: editGroupName.trim(),
+              avatar: newAvatar,
+              lastMessage: 'Grup profili güncellendi',
+              time: timestampStr
+            };
+          }
+          return c;
+        });
+        localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+        
+        chat.name = editGroupName.trim();
+        chat.avatar = newAvatar;
+        setGroupUpdateMsg('Grup başarıyla güncellendi (Yerel)!');
+      }
+      setIsUpdatingGroup(false);
+    }
+  };
+
+  const handleAddMemberToGroup = async (friendId: string) => {
+    setIsUpdatingGroup(true);
+    setGroupUpdateMsg('');
+
+    const updatedMembers = [...(chat.members || [myUid]), friendId];
+    const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const updatedTimeIso = new Date().toISOString();
+
+    if (db) {
+      try {
+        // 1. Update central groups entry
+        await setDoc(doc(db, 'groups', chat.id), {
+          members: updatedMembers
+        }, { merge: true });
+
+        // 2. Update active chats for all existing and new members
+        for (const memberId of updatedMembers) {
+          await setDoc(doc(db, 'users', memberId, 'active_chats', chat.id), {
+            members: updatedMembers,
+            lastMessage: 'Yeni üye eklendi',
+            time: timestampStr,
+            updatedAt: updatedTimeIso
+          }, { merge: true });
+        }
+        
+        chat.members = updatedMembers;
+        setGroupUpdateMsg('Üye başarıyla eklendi!');
+      } catch (err: any) {
+        console.error("Grup üye ekleme hatası:", err);
+        setGroupUpdateMsg('Hata: ' + (err.message || err));
+      } finally {
+        setIsUpdatingGroup(false);
+      }
+    } else {
+      // Mock mode
+      const savedChats = localStorage.getItem('bizbize_active_chats');
+      if (savedChats) {
+        const activeChats: ChatItem[] = JSON.parse(savedChats);
+        const updated = activeChats.map(c => {
+          if (c.id === chat.id) {
+            return {
+              ...c,
+              members: updatedMembers,
+              lastMessage: 'Yeni üye eklendi',
+              time: timestampStr
+            };
+          }
+          return c;
+        });
+        localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+        chat.members = updatedMembers;
+        setGroupUpdateMsg('Üye başarıyla eklendi (Yerel)!');
+      }
+      setIsUpdatingGroup(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
@@ -84,29 +277,62 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
         const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const updatedTimeIso = new Date().toISOString();
 
-        // 1. Update my active chats list
-        await setDoc(doc(db, 'users', myUid, 'active_chats', targetUid), {
-          id: targetUid,
-          name: chat.name,
-          avatar: chat.avatar,
-          lastMessage: textToSend,
-          time: timestampStr,
-          type: 'user',
-          updatedAt: updatedTimeIso
-        }, { merge: true });
+        if (chat.type === 'group') {
+          const membersList = chat.members || [myUid];
+          for (const memberId of membersList) {
+            await setDoc(doc(db, 'users', memberId, 'active_chats', chat.id), {
+              id: chat.id,
+              name: chat.name,
+              avatar: chat.avatar,
+              lastMessage: textToSend,
+              time: timestampStr,
+              type: 'group',
+              updatedAt: updatedTimeIso,
+              members: membersList
+            }, { merge: true });
+          }
+        } else {
+          // 1. Update my active chats list
+          await setDoc(doc(db, 'users', myUid, 'active_chats', targetUid), {
+            id: targetUid,
+            name: chat.name,
+            avatar: chat.avatar,
+            lastMessage: textToSend,
+            time: timestampStr,
+            type: 'user',
+            updatedAt: updatedTimeIso
+          }, { merge: true });
 
-        // 2. Update target user's active chats list so it pops up in their chats tab
-        await setDoc(doc(db, 'users', targetUid, 'active_chats', myUid), {
-          id: myUid,
-          name: myProfile.name || 'Gizli Sohbet',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(myProfile.name || myUid)}`,
-          lastMessage: textToSend,
-          time: timestampStr,
-          type: 'user',
-          updatedAt: updatedTimeIso
-        }, { merge: true });
+          // 2. Update target user's active chats list so it pops up in their chats tab
+          await setDoc(doc(db, 'users', targetUid, 'active_chats', myUid), {
+            id: myUid,
+            name: myProfile.name || 'Gizli Sohbet',
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(myProfile.name || myUid)}`,
+            lastMessage: textToSend,
+            time: timestampStr,
+            type: 'user',
+            updatedAt: updatedTimeIso
+          }, { merge: true });
+        }
       } catch (err) {
         console.error("Firestore aktif sohbet listesi güncellenirken hata:", err);
+      }
+    } else {
+      // Mock mode fallback for messages
+      const savedChats = localStorage.getItem('bizbize_active_chats');
+      if (savedChats) {
+        const activeChats: ChatItem[] = JSON.parse(savedChats);
+        const updated = activeChats.map(c => {
+          if (c.id === chat.id) {
+            return {
+              ...c,
+              lastMessage: textToSend,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+          }
+          return c;
+        });
+        localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
       }
     }
   };
@@ -156,24 +382,46 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
               <span className="material-icons-round text-3xl">chevron_left</span>
             </button>
           )}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={onGoLive}>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => chat.type === 'group' ? setShowGroupSettings(true) : onGoLive()}>
             <div className="relative">
               <img src={chat.avatar} className="w-11 h-11 rounded-full border border-white/10 bg-slate-700" alt="" />
               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-stitch-green rounded-full border-2 border-background-dark pulse-green"></div>
             </div>
             <div>
               <h2 className="text-base font-bold leading-tight">{chat.name}</h2>
-              <p className="text-[10px] text-stitch-green font-bold tracking-widest uppercase">Güvenli Düğüm</p>
+              <p className="text-[10px] text-stitch-green font-bold tracking-widest uppercase">{chat.type === 'group' ? 'Güvenli Grup Düğümü' : 'Güvenli Düğüm'}</p>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-3">
-          <button onClick={() => onCall('voice')} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all">
-            <span className="material-icons-round">call</span>
-          </button>
-          <button onClick={() => onCall('video')} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all">
-            <span className="material-icons-round">videocam</span>
-          </button>
+          {chat.type === 'group' ? (
+            <>
+              <button 
+                onClick={onGoLive} 
+                title="Grup Yayını Başlat"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 text-red-500 border border-red-500/30 hover:bg-red-600/30 rounded-xl transition-all font-bold text-xs animate-pulse hover:animate-none"
+              >
+                <span className="material-icons-round text-sm">sensors</span>
+                <span className="hidden sm:inline">Yayını Başlat</span>
+              </button>
+              <button 
+                onClick={() => setShowGroupSettings(true)} 
+                title="Grup Ayarları"
+                className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
+              >
+                <span className="material-icons-round">settings</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => onCall('voice')} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all">
+                <span className="material-icons-round">call</span>
+              </button>
+              <button onClick={() => onCall('video')} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all">
+                <span className="material-icons-round">videocam</span>
+              </button>
+            </>
+          )}
           <div className="w-[1px] h-6 bg-white/5 mx-1 hidden sm:block"></div>
           <button onClick={() => setShowSecurityInfo(true)} className="w-10 h-10 flex items-center justify-center text-stitch-green hover:bg-stitch-green/10 rounded-xl transition-all">
             <span className="material-icons-round">lock</span>
@@ -323,6 +571,107 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
               </p>
             </div>
             <button onClick={() => setShowSecurityInfo(false)} className="w-full bg-primary py-4 rounded-2xl font-bold mt-8 shadow-xl shadow-primary/30 active:scale-95 transition-all">Kapat</button>
+          </div>
+        </div>
+      )}
+
+      {showGroupSettings && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in">
+          <div className="bg-surface-dark/95 border border-white/10 rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl animate-scale-in text-white overflow-hidden max-h-[90%] flex flex-col">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <div>
+                <h3 className="text-xl font-bold">Grup Bilgileri & Ayarları</h3>
+                <p className="text-xs text-slate-400">Üyeleri yönetin ve grubu güncelleyin</p>
+              </div>
+              <button onClick={() => setShowGroupSettings(false)} className="text-slate-500 hover:text-white p-1.5 hover:bg-white/5 rounded-full transition-all">
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-1">
+              {/* Group Profile Edit */}
+              <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-4">
+                  <img src={chat.avatar} className="w-16 h-16 rounded-full border-2 border-primary/20 bg-slate-700 animate-pulse-slow" alt="Grup Avatarı" />
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Grup İsmi</label>
+                    <input 
+                      type="text" 
+                      value={editGroupName}
+                      onChange={e => setEditGroupName(e.target.value)}
+                      className="w-full bg-background-dark/80 border border-white/5 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none"
+                    />
+                  </div>
+                </div>
+                <button 
+                  onClick={handleUpdateGroupProfile}
+                  disabled={isUpdatingGroup || !editGroupName.trim()}
+                  className="w-full bg-primary/25 hover:bg-primary/45 border border-primary/30 text-primary font-bold py-2 rounded-xl text-xs transition-all active:scale-[0.98]"
+                >
+                  Grup Profilini Güncelle
+                </button>
+              </div>
+
+              {/* Members List */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Grup Üyeleri ({memberDetails.length})</h4>
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-4 divide-y divide-white/5 max-h-48 overflow-y-auto custom-scrollbar">
+                  {memberDetails.map(member => (
+                    <div key={member.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <img src={member.avatar} className="w-8 h-8 rounded-full border border-white/10" alt="" />
+                      <span className="text-xs font-medium truncate flex-1">{member.name}</span>
+                      {member.id === myUid && (
+                        <span className="text-[9px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full border border-primary/30 uppercase">Yönetici</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add New Member Section */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Arkadaş Ekle</h4>
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-4 max-h-48 overflow-y-auto custom-scrollbar space-y-2">
+                  {(() => {
+                    const savedContacts: ChatItem[] = JSON.parse(localStorage.getItem('bizbize_contacts') || '[]');
+                    const membersList = chat.members || [myUid];
+                    const addableFriends = savedContacts.filter(c => !membersList.includes(c.id));
+
+                    if (addableFriends.length === 0) {
+                      return <p className="text-xs text-slate-500 italic py-2 text-center">Grup dışındaki tüm arkadaşlarınız zaten ekli.</p>;
+                    }
+
+                    return addableFriends.map(friend => (
+                      <div key={friend.id} className="flex items-center justify-between gap-3 bg-background-dark/50 p-2 rounded-xl border border-white/5 hover:border-white/10 transition-all">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <img src={friend.avatar} className="w-8 h-8 rounded-full border border-white/10" alt="" />
+                          <span className="text-xs font-semibold truncate">{friend.name}</span>
+                        </div>
+                        <button 
+                          onClick={() => handleAddMemberToGroup(friend.id)}
+                          className="bg-primary hover:bg-primary/95 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-md active:scale-95 transition-all"
+                        >
+                          Ekle
+                        </button>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              {groupUpdateMsg && (
+                <p className={`text-xs font-bold text-center ${groupUpdateMsg.startsWith('Hata') ? 'text-red-500' : 'text-stitch-green'}`}>
+                  {groupUpdateMsg}
+                </p>
+              )}
+            </div>
+
+            <button 
+              onClick={() => setShowGroupSettings(false)} 
+              className="w-full bg-slate-700 hover:bg-slate-650 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all mt-6 shrink-0 text-xs"
+            >
+              Tamam
+            </button>
           </div>
         </div>
       )}

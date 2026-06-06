@@ -257,9 +257,10 @@ const App: React.FC = () => {
             {currentScreen === ScreenType.LIVE_STREAM && (
               <LiveStreamScreen 
                 onClose={() => isLargeScreen ? setCurrentScreen(ScreenType.CHAT_LIST) : setCurrentScreen(ScreenType.CHAT_DETAIL)} 
-                currentChatId={selectedChat ? [JSON.parse(localStorage.getItem('bizbize_profile') || '{}').uid, selectedChat.id].sort().join('_') : undefined}
+                currentChatId={selectedChat ? (selectedChat.type === 'group' ? selectedChat.id : [JSON.parse(localStorage.getItem('bizbize_profile') || '{}').uid, selectedChat.id].sort().join('_')) : undefined}
                 myUid={JSON.parse(localStorage.getItem('bizbize_profile') || '{}').uid}
                 senderName={JSON.parse(localStorage.getItem('bizbize_profile') || '{}').name}
+                chat={selectedChat || undefined}
               />
             )}
 

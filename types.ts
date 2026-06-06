@@ -34,6 +34,7 @@ export interface ChatItem {
   type: 'user' | 'group' | 'channel';
   isOnline?: boolean;
   isVerified?: boolean;
+  members?: string[];
 }
 
 export interface Message {

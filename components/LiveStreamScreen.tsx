@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Message } from '../types';
+import { Message, ChatItem } from '../types';
 import { saveMessageToDb } from '../db';
 import { db } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
@@ -9,9 +9,10 @@ interface LiveStreamProps {
   currentChatId?: string;
   myUid?: string;
   senderName?: string;
+  chat?: ChatItem;
 }
 
-const LiveStreamScreen: React.FC<LiveStreamProps> = ({ onClose, currentChatId, myUid, senderName }) => {
+const LiveStreamScreen: React.FC<LiveStreamProps> = ({ onClose, currentChatId, myUid, senderName, chat }) => {
   const [isSharing, setIsSharing] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [roomId, setRoomId] = useState('');
@@ -32,10 +33,13 @@ const LiveStreamScreen: React.FC<LiveStreamProps> = ({ onClose, currentChatId, m
       // Broadcast livestream message if in a chat
       if (currentChatId && myUid) {
         const secretKey = `bizbize-secret-${currentChatId}`;
+        const isGroup = chat?.type === 'group';
         const userMsg: Message = {
           id: Math.random().toString(36).substr(2, 9),
           senderId: myUid,
-          text: `${senderName || 'Bir kullanıcı'} görüntülü canlı yayın başlattı! Katılmak için tıklayın.`,
+          text: isGroup 
+            ? `${senderName || 'Bir üye'} grup canlı yayını başlattı! Katılmak için tıklayın.` 
+            : `${senderName || 'Bir kullanıcı'} görüntülü canlı yayın başlattı! Katılmak için tıklayın.`,
           type: 'livestream',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           isMe: true,
@@ -47,23 +51,55 @@ const LiveStreamScreen: React.FC<LiveStreamProps> = ({ onClose, currentChatId, m
 
         // Also update the last active chats in Firestore if db is active
         if (db) {
-          const parts = currentChatId.split('_');
-          const targetUid = parts.find(uid => uid !== myUid) || '';
-          if (targetUid) {
-            const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const updatedTimeIso = new Date().toISOString();
+          const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const updatedTimeIso = new Date().toISOString();
 
-            await setDoc(doc(db, 'users', myUid, 'active_chats', targetUid), {
-              lastMessage: '📹 Canlı Yayın Başlatıldı',
-              time: timestampStr,
-              updatedAt: updatedTimeIso
-            }, { merge: true });
+          if (isGroup && chat) {
+            const memberIds = chat.members || [myUid];
+            for (const memberId of memberIds) {
+              try {
+                await setDoc(doc(db, 'users', memberId, 'active_chats', chat.id), {
+                  lastMessage: '📹 Canlı Yayın Başlatıldı',
+                  time: timestampStr,
+                  updatedAt: updatedTimeIso
+                }, { merge: true });
+              } catch (err) {
+                console.error("Grup üyesi aktif sohbet güncelleme hatası:", err);
+              }
+            }
+          } else {
+            const parts = currentChatId.split('_');
+            const targetUid = parts.find(uid => uid !== myUid) || '';
+            if (targetUid) {
+              await setDoc(doc(db, 'users', myUid, 'active_chats', targetUid), {
+                lastMessage: '📹 Canlı Yayın Başlatıldı',
+                time: timestampStr,
+                updatedAt: updatedTimeIso
+              }, { merge: true });
 
-            await setDoc(doc(db, 'users', targetUid, 'active_chats', myUid), {
-              lastMessage: '📹 Canlı Yayın Başlatıldı',
-              time: timestampStr,
-              updatedAt: updatedTimeIso
-            }, { merge: true });
+              await setDoc(doc(db, 'users', targetUid, 'active_chats', myUid), {
+                lastMessage: '📹 Canlı Yayın Başlatıldı',
+                time: timestampStr,
+                updatedAt: updatedTimeIso
+              }, { merge: true });
+            }
+          }
+        } else {
+          // Local storage fallback
+          const savedChats = localStorage.getItem('bizbize_active_chats');
+          if (savedChats) {
+            const activeChats: ChatItem[] = JSON.parse(savedChats);
+            const updated = activeChats.map(c => {
+              if (c.id === (chat?.id || currentChatId)) {
+                return {
+                  ...c,
+                  lastMessage: '📹 Canlı Yayın Başlatıldı',
+                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+              }
+              return c;
+            });
+            localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
           }
         }
       }
