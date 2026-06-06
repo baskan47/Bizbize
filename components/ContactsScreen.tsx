@@ -98,9 +98,9 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
           setNewContactId('@');
           setShowAddModal(false);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Kişi ekleme hatası:", err);
-        setErrorMsg('Bir sunucu hatası oluştu, lütfen tekrar deneyin.');
+        setErrorMsg('Bir sunucu hatası oluştu: ' + (err.message || err));
       } finally {
         setIsLoading(false);
       }

@@ -61,9 +61,13 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
           uid: auth.currentUser.uid,
           updatedAt: new Date().toISOString()
         }, { merge: true });
-      } catch (err) {
+        alert("Profil başarıyla kaydedildi ve bulut veri tabanında güncellendi! Diğer kullanıcılar artık sizi bulabilir.");
+      } catch (err: any) {
         console.error("Firestore profil güncelleme hatası:", err);
+        alert("Profil buluta kaydedilemedi (Veri tabanı hatası): " + (err.message || err));
       }
+    } else {
+      alert("Profil yerel olarak kaydedildi (Firebase bağlantısı aktif değil).");
     }
 
     setShowEditModal(false);
