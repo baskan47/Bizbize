@@ -1,4 +1,3 @@
-
 export enum ScreenType {
   CHAT_LIST = 'CHAT_LIST',
   CHAT_DETAIL = 'CHAT_DETAIL',
@@ -7,7 +6,8 @@ export enum ScreenType {
   DISCOVERY = 'DISCOVERY',
   SETTINGS = 'SETTINGS',
   CALLING = 'CALLING',
-  CONTACTS = 'CONTACTS'
+  CONTACTS = 'CONTACTS',
+  CALL_LOGS = 'CALL_LOGS'
 }
 
 export enum ChatCategory {
@@ -58,3 +58,14 @@ export interface Message {
   docId?: string;
 }
 
+export interface CallLog {
+  id: string;
+  peerId: string;
+  peerName: string;
+  peerAvatar: string;
+  type: CallType;
+  direction: 'incoming' | 'outgoing';
+  status: 'missed' | 'answered' | 'rejected';
+  timestamp: string;
+  duration?: number; // in seconds
+}

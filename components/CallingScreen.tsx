@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatItem, CallType } from '../types';
+import { db, auth } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface CallingScreenProps {
   callType: CallType;
@@ -103,12 +105,14 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
         setCallStatus(prev => prev === 'connecting' ? 'secure' : prev);
       }, 6000);
 
+      const targetPeerId = isIncoming && incomingOffer ? (incomingOffer.senderId || chat.id) : chat.id;
+
       // Handle ICE Candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           socket?.send(JSON.stringify({
             type: 'candidate',
-            targetId: chat.id,
+            targetId: targetPeerId,
             candidate: event.candidate
           }));
         }
@@ -120,7 +124,7 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
         await pc.setLocalDescription(offer);
         socket?.send(JSON.stringify({
           type: 'offer',
-          targetId: chat.id,
+          targetId: targetPeerId,
           callType: callType,
           offer: offer
         }));
@@ -143,7 +147,7 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
         await pc.setLocalDescription(answer);
         socket?.send(JSON.stringify({
           type: 'answer',
-          targetId: chat.id,
+          targetId: targetPeerId,
           answer: answer
         }));
         setCallStatus('connecting'); // Wait for WebRTC connection to handshake to go secure
@@ -255,7 +259,40 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
     await setupMediaAndWebRTC();
   };
 
+  const saveCallLog = async (finalDuration?: number, wasAnswered: boolean = false) => {
+    try {
+      const myProfile = JSON.parse(localStorage.getItem('bizbize_profile') || '{}');
+      const myUid = auth?.currentUser?.uid || myProfile.uid;
+      if (!myUid) return;
+
+      const newLog = {
+        peerId: chat.id,
+        peerName: chat.name,
+        peerAvatar: chat.avatar,
+        type: callType,
+        direction: isIncoming ? 'incoming' : 'outgoing' as 'incoming' | 'outgoing',
+        status: wasAnswered ? 'answered' : (isIncoming ? 'missed' : 'rejected') as 'answered' | 'missed' | 'rejected',
+        timestamp: new Date().toISOString(),
+        duration: finalDuration || 0
+      };
+
+      if (db) {
+        await addDoc(collection(db, 'users', myUid, 'call_logs'), newLog);
+      }
+
+      const saved = localStorage.getItem('bizbize_call_logs');
+      const list = saved ? JSON.parse(saved) : [];
+      list.unshift({ id: `log-${Math.random().toString(36).substr(2, 9)}`, ...newLog });
+      localStorage.setItem('bizbize_call_logs', JSON.stringify(list.slice(0, 100)));
+    } catch (e) {
+      console.error("Failed to write call log:", e);
+    }
+  };
+
   const handleEndCall = () => {
+    const wasAnswered = callStatus === 'secure';
+    saveCallLog(callDuration, wasAnswered);
+
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({
         type: 'hangup',

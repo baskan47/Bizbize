@@ -153,7 +153,7 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onNavClick, activeScreen, hid
       {!hideFooter && (
         <footer className="h-20 bg-background-dark/80 backdrop-blur-xl border-t border-white/5 flex items-center justify-around px-4 pb-4">
           <NavButton icon="chat_bubble" label="Mesajlar" active={activeScreen === ScreenType.CHAT_LIST} onClick={() => onNavClick(ScreenType.CHAT_LIST)} />
-          <NavButton icon="explore" label="Keşfet" active={activeScreen === ScreenType.DISCOVERY} onClick={() => onNavClick(ScreenType.DISCOVERY)} />
+          <NavButton icon="call" label="Aramalar" active={activeScreen === ScreenType.CALL_LOGS} onClick={() => onNavClick(ScreenType.CALL_LOGS)} />
           <NavButton icon="people" label="Kişiler" active={activeScreen === ScreenType.CONTACTS} onClick={() => onNavClick(ScreenType.CONTACTS)} />
           <NavButton icon="settings" label="Ayarlar" active={activeScreen === ScreenType.SETTINGS} onClick={() => onNavClick(ScreenType.SETTINGS)} />
         </footer>

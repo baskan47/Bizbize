@@ -208,9 +208,9 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
             <span className="material-icons-round">chat_bubble</span>
             <span className="text-[10px] font-bold">Mesajlar</span>
           </button>
-          <button onClick={() => onNavClick(ScreenType.DISCOVERY)} className="flex flex-col items-center gap-0.5 text-slate-500">
-            <span className="material-icons-round">explore</span>
-            <span className="text-[10px] font-bold">Keşfet</span>
+          <button onClick={() => onNavClick(ScreenType.CALL_LOGS)} className="flex flex-col items-center gap-0.5 text-slate-500">
+            <span className="material-icons-round">call</span>
+            <span className="text-[10px] font-bold">Aramalar</span>
           </button>
           <button onClick={() => onNavClick(ScreenType.CONTACTS)} className="flex flex-col items-center gap-0.5 text-primary">
             <span className="material-icons-round">people</span>

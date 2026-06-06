@@ -8,6 +8,7 @@ import SettingsScreen from './components/SettingsScreen';
 import CallingScreen from './components/CallingScreen';
 import ContactsScreen from './components/ContactsScreen';
 import LoginRegisterScreen from './components/LoginRegisterScreen';
+import CallLogsScreen from './components/CallLogsScreen';
 import { db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -171,6 +172,11 @@ const App: React.FC = () => {
             onClick={() => handleNavClick(ScreenType.CHAT_LIST)} 
           />
           <NavRailButton 
+            icon="call" 
+            active={currentScreen === ScreenType.CALL_LOGS} 
+            onClick={() => handleNavClick(ScreenType.CALL_LOGS)} 
+          />
+          <NavRailButton 
             icon="explore" 
             active={currentScreen === ScreenType.DISCOVERY} 
             onClick={() => handleNavClick(ScreenType.DISCOVERY)} 
@@ -190,8 +196,8 @@ const App: React.FC = () => {
         </aside>
       )}
 
-      {/* 2. LEFT COLUMN (Chat List / Settings / Contacts / Discovery) */}
-      <div className={`${isLargeScreen ? 'w-80 lg:w-96 border-r border-white/5' : (currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.SETTINGS || currentScreen === ScreenType.DISCOVERY || currentScreen === ScreenType.CONTACTS ? 'w-full' : 'hidden')} flex-shrink-0 bg-background-dark relative`}>
+      {/* 2. LEFT COLUMN (Chat List / Settings / Contacts / Discovery / Call Logs) */}
+      <div className={`${isLargeScreen ? 'w-80 lg:w-96 border-r border-white/5' : (currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.SETTINGS || currentScreen === ScreenType.DISCOVERY || currentScreen === ScreenType.CONTACTS || currentScreen === ScreenType.CALL_LOGS ? 'w-full' : 'hidden')} flex-shrink-0 bg-background-dark relative`}>
         {currentScreen === ScreenType.SETTINGS ? (
           <SettingsScreen onNavClick={handleNavClick} activeScreen={currentScreen} hideFooter={isLargeScreen} onLogout={handleLogout} />
         ) : currentScreen === ScreenType.DISCOVERY ? (
@@ -203,6 +209,13 @@ const App: React.FC = () => {
             onNavClick={handleNavClick} 
             activeScreen={currentScreen} 
             hideFooter={isLargeScreen} 
+          />
+        ) : currentScreen === ScreenType.CALL_LOGS ? (
+          <CallLogsScreen 
+            onBack={() => handleNavClick(ScreenType.CHAT_LIST)}
+            onNavClick={handleNavClick}
+            activeScreen={currentScreen}
+            hideFooter={isLargeScreen}
           />
         ) : (
           <ChatListScreen
@@ -217,7 +230,7 @@ const App: React.FC = () => {
       </div>
 
       {/* 3. MAIN AREA */}
-      <main className={`flex-1 flex flex-col relative bg-background-dark ${!isLargeScreen && (currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.SETTINGS || currentScreen === ScreenType.DISCOVERY || currentScreen === ScreenType.CONTACTS) ? 'hidden' : 'flex'}`}>
+      <main className={`flex-1 flex flex-col relative bg-background-dark ${!isLargeScreen && (currentScreen === ScreenType.CHAT_LIST || currentScreen === ScreenType.SETTINGS || currentScreen === ScreenType.DISCOVERY || currentScreen === ScreenType.CONTACTS || currentScreen === ScreenType.CALL_LOGS) ? 'hidden' : 'flex'}`}>
         {currentScreen === ScreenType.CALLING && activeCall ? (
           <CallingScreen
             callType={activeCall.type}
