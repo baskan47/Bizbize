@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ScreenType, ChatItem, Message, CallType } from './types';
 import ChatListScreen from './components/ChatListScreen';
 import ChatDetailScreen from './components/ChatDetailScreen';
@@ -8,6 +8,8 @@ import SettingsScreen from './components/SettingsScreen';
 import CallingScreen from './components/CallingScreen';
 import ContactsScreen from './components/ContactsScreen';
 import LoginRegisterScreen from './components/LoginRegisterScreen';
+import { db } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -18,6 +20,81 @@ const App: React.FC = () => {
   const [globalMessages, setGlobalMessages] = useState<Record<string, Message[]>>({});
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 768);
   const [activeCall, setActiveCall] = useState<{ type: CallType; chat: ChatItem; isIncoming?: boolean } | null>(null);
+  
+  const socketRef = useRef<WebSocket | null>(null);
+  const [incomingCallOffer, setIncomingCallOffer] = useState<any>(null);
+
+  // Global WebSocket connection for incoming calls
+  useEffect(() => {
+    if (!isAuthenticated) {
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+      return;
+    }
+
+    const savedProfile = JSON.parse(localStorage.getItem('bizbize_profile') || '{}');
+    const myUid = savedProfile.uid;
+    if (!myUid) return;
+
+    const wsUrl = import.meta.env.VITE_SIGNALING_SERVER_URL || 'ws://localhost:3001';
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      socket.send(JSON.stringify({
+        type: 'register',
+        userId: myUid
+      }));
+    };
+
+    socket.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'offer') {
+          // Fetch caller details from Firestore
+          let callerChat: ChatItem = {
+            id: data.senderId,
+            name: 'Gizli Arama',
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.senderId}`,
+            lastMessage: '',
+            time: 'Şimdi',
+            unreadCount: 0,
+            type: 'user'
+          };
+
+          if (db) {
+            try {
+              const docSnap = await getDoc(doc(db, 'users', data.senderId));
+              if (docSnap.exists()) {
+                const docData = docSnap.data();
+                callerChat.name = docData.name || callerChat.name;
+                callerChat.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(docData.name || data.senderId)}`;
+              }
+            } catch (err) {
+              console.error("Caller info fetch failed:", err);
+            }
+          }
+
+          setIncomingCallOffer(data);
+          setActiveCall({ type: data.callType || 'video', chat: callerChat, isIncoming: true });
+          setCurrentScreen(ScreenType.CALLING);
+        } else if (data.type === 'hangup') {
+          setActiveCall(null);
+          setIncomingCallOffer(null);
+          setCurrentScreen(ScreenType.CHAT_LIST);
+        }
+      } catch (err) {
+        console.error("Global socket message processing error:", err);
+      }
+    };
+
+    return () => {
+      socket.close();
+      socketRef.current = null;
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -31,7 +108,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [selectedChat, currentScreen]);
 
-  const handleLoginSuccess = (profile: { name: string; phone: string; status: string; avatarSeed: string }) => {
+  const handleLoginSuccess = (profile: { uid?: string; name: string; phone: string; status: string; avatarSeed: string; userId?: string }) => {
     localStorage.setItem('bizbize_profile', JSON.stringify(profile));
     setIsAuthenticated(true);
     setCurrentScreen(ScreenType.CHAT_LIST);
@@ -146,8 +223,11 @@ const App: React.FC = () => {
             callType={activeCall.type}
             chat={activeCall.chat}
             isIncoming={activeCall.isIncoming}
+            socket={socketRef.current}
+            incomingOffer={incomingCallOffer}
             onEnd={() => {
               setActiveCall(null);
+              setIncomingCallOffer(null);
               setCurrentScreen(isLargeScreen ? ScreenType.CHAT_LIST : ScreenType.CHAT_DETAIL);
             }}
           />
@@ -175,7 +255,12 @@ const App: React.FC = () => {
             )}
 
             {currentScreen === ScreenType.LIVE_STREAM && (
-              <LiveStreamScreen onClose={() => isLargeScreen ? setCurrentScreen(ScreenType.CHAT_LIST) : setCurrentScreen(ScreenType.CHAT_DETAIL)} />
+              <LiveStreamScreen 
+                onClose={() => isLargeScreen ? setCurrentScreen(ScreenType.CHAT_LIST) : setCurrentScreen(ScreenType.CHAT_DETAIL)} 
+                currentChatId={selectedChat ? [JSON.parse(localStorage.getItem('bizbize_profile') || '{}').uid, selectedChat.id].sort().join('_') : undefined}
+                myUid={JSON.parse(localStorage.getItem('bizbize_profile') || '{}').uid}
+                senderName={JSON.parse(localStorage.getItem('bizbize_profile') || '{}').name}
+              />
             )}
 
             {currentScreen === ScreenType.ATTACHMENTS && selectedChat && (

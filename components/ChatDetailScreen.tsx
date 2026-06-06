@@ -237,6 +237,27 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
                     </div>
                   </div>
                 )}
+                {msg.type === 'livestream' && (
+                  <div className="w-full bg-gradient-to-r from-red-600/20 to-primary/20 p-5 rounded-2xl border border-red-500/30 shadow-2xl flex flex-col gap-3 max-w-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center text-red-500 animate-pulse">
+                        <span className="material-icons-round text-2xl">sensors</span>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-white">Canlı Yayın Başladı</h4>
+                        <p className="text-[10px] text-slate-400">Yayıncı: {msg.livestreamSenderName || 'Kullanıcı'}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed">{msg.text}</p>
+                    <button 
+                      onClick={onGoLive}
+                      className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs"
+                    >
+                      <span className="material-icons-round text-sm">play_arrow</span>
+                      Yayına Katıl
+                    </button>
+                  </div>
+                )}
                 {msg.type === 'ephemeral' && <EphemeralMessage message={msg} onExpire={() => deleteMessage(msg.id)} />}
                 {msg.type === 'file' && (
                    <div className="flex items-center gap-4 bg-surface-dark p-4 rounded-2xl border border-white/5 shadow-xl hover:bg-white/5 transition-colors cursor-pointer group">

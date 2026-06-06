@@ -5,10 +5,12 @@ interface CallingScreenProps {
   callType: CallType;
   chat: ChatItem;
   isIncoming?: boolean;
+  socket: WebSocket | null;
+  incomingOffer?: any;
   onEnd: () => void;
 }
 
-const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncoming = false, onEnd }) => {
+const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncoming = false, socket, incomingOffer, onEnd }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(callType === 'voice');
   const [callDuration, setCallDuration] = useState(0);
@@ -54,77 +56,90 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
 
 
 
+  // Attach socketRef to global socket prop
   useEffect(() => {
-    const wsUrl = import.meta.env.VITE_SIGNALING_SERVER_URL || 'ws://localhost:3001';
-    const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
+  }, [socket]);
 
-    socket.onopen = async () => {
-      // Register current user (me)
-      socket.send(JSON.stringify({
-        type: 'register',
-        userId: 'me'
-      }));
+  const setupMediaAndWebRTC = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: callType === 'video',
+        audio: true
+      });
+      localStreamRef.current = stream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
 
-      // Initiate media stream
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: callType === 'video',
-          audio: true
-        });
-        localStreamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
+      // Initialize Peer Connection
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
+      peerConnectionRef.current = pc;
+
+      // Add local tracks to peer connection
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      // Handle remote stream
+      pc.ontrack = (event) => {
+        if (remoteVideoRef.current && event.streams[0]) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+          setCallStatus('secure');
         }
+      };
 
-        // Initialize Peer Connection
-        const pc = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        });
-        peerConnectionRef.current = pc;
-
-        // Add local tracks to peer connection
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-        // Handle remote stream
-        pc.ontrack = (event) => {
-          if (remoteVideoRef.current && event.streams[0]) {
-            remoteVideoRef.current.srcObject = event.streams[0];
-            setCallStatus('secure');
-          }
-        };
-
-        // Handle ICE Candidates
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.send(JSON.stringify({
-              type: 'candidate',
-              targetId: chat.id,
-              candidate: event.candidate
-            }));
-          }
-        };
-
-        if (!isIncoming) {
-          // Send WebRTC Offer to target user
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.send(JSON.stringify({
-            type: 'offer',
+      // Handle ICE Candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket?.send(JSON.stringify({
+            type: 'candidate',
             targetId: chat.id,
-            offer: offer
+            candidate: event.candidate
           }));
         }
-      } catch (err) {
-        console.error("Kamera/Mikrofon erişim hatası:", err);
-        // Fallback to simulation to ensure no broken flow for user testing
+      };
+
+      if (!isIncoming) {
+        // Send WebRTC Offer to target user
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket?.send(JSON.stringify({
+          type: 'offer',
+          targetId: chat.id,
+          callType: callType,
+          offer: offer
+        }));
+      } else if (incomingOffer) {
+        // Process existing incoming offer
+        await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket?.send(JSON.stringify({
+          type: 'answer',
+          targetId: chat.id,
+          answer: answer
+        }));
         setCallStatus('secure');
       }
-    };
+    } catch (err) {
+      console.error("Kamera/Mikrofon erişim hatası veya WebRTC kurulum hatası:", err);
+      setCallStatus('secure');
+    }
+  };
 
+  useEffect(() => {
+    if (!socket) return;
+
+    if (!isIncoming) {
+      setupMediaAndWebRTC();
+    }
+
+    // Listen to signaling via the global socket
+    const originalOnMessage = socket.onmessage;
     socket.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -132,16 +147,9 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
 
         switch (data.type) {
           case 'offer':
-            if (pc && isIncoming) {
-              await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              socket.send(JSON.stringify({
-                type: 'answer',
-                targetId: data.senderId,
-                answer: answer
-              }));
-              setCallStatus('connecting');
+            if (isIncoming) {
+              // Store offer data to respond later upon accept
+              // This case shouldn't generally happen here if offer was already stored in App.tsx
             }
             break;
 
@@ -164,19 +172,22 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
             
           case 'error':
             console.warn("Sinyalleşme Hatası:", data.message);
-            // Fallback for simulation testing
             setCallStatus('secure');
             break;
         }
       } catch (err) {
         console.error("Sinyalleşme mesajı işleme hatası:", err);
       }
+
+      if (originalOnMessage) {
+        originalOnMessage.call(socket, event);
+      }
     };
 
     return () => {
-      socket.close();
+      socket.onmessage = originalOnMessage;
     };
-  }, [chat.id, isIncoming, callType]);
+  }, [chat.id, isIncoming, callType, socket, incomingOffer]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -186,18 +197,12 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
 
   const acceptCall = async () => {
     setCallStatus('connecting');
-    // If incoming call was accepted, we wait for the WebRTC offer or send confirmation
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        type: 'answer_ready',
-        targetId: chat.id
-      }));
-    }
+    await setupMediaAndWebRTC();
   };
 
   const handleEndCall = () => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
         type: 'hangup',
         targetId: chat.id
       }));
@@ -208,6 +213,7 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
       onEnd();
     }, 1000);
   };
+
 
   return (
     <div className="h-full bg-[#050a0d] relative flex flex-col overflow-hidden animate-in fade-in duration-700">

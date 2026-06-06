@@ -41,6 +41,7 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
         } else {
           const result = await signInWithEmailAndPassword(auth, email.trim(), password);
           let profile = {
+            uid: result.user.uid,
             name: email.split('@')[0],
             phone: email.trim(),
             status: statusText.trim(),
@@ -54,6 +55,7 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
               if (docSnap.exists()) {
                 const data = docSnap.data();
                 profile = {
+                  uid: result.user.uid,
                   name: data.name || profile.name,
                   phone: data.phone || profile.phone,
                   status: data.status || profile.status,
@@ -119,6 +121,7 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
     
     setIsLoading(true);
     const profile = {
+      uid: auth?.currentUser?.uid || `mock-${Math.random().toString(36).substr(2, 9)}`,
       name: name.trim(),
       phone: email.trim(),
       status: statusText.trim(),

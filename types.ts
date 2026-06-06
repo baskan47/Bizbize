@@ -40,7 +40,7 @@ export interface Message {
   id: string;
   senderId: string;
   text?: string;
-  type: 'text' | 'voice' | 'ephemeral' | 'poll' | 'file' | 'image';
+  type: 'text' | 'voice' | 'ephemeral' | 'poll' | 'file' | 'image' | 'livestream';
   timestamp: string;
   isMe: boolean;
   status: 'sent' | 'delivered' | 'read';
@@ -52,4 +52,7 @@ export interface Message {
   isZipped?: boolean;
   imageUrl?: string;
   imageCaption?: string;
+  livestreamRoomId?: string;
+  livestreamSenderName?: string;
 }
+
