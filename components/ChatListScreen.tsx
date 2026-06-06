@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { ChatItem, ChatCategory, ScreenType } from '../types';
+import { db, auth } from '../firebase';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 interface ChatListProps {
   onSelectChat: (chat: ChatItem) => void;
@@ -17,14 +19,40 @@ const ChatListScreen: React.FC<ChatListProps> = ({ onSelectChat, onDiscovery, on
   const [chats, setChats] = useState<ChatItem[]>([]);
 
   useEffect(() => {
-    const loadChats = () => {
+    const myUid = auth?.currentUser?.uid;
+    if (!myUid || !db) {
+      // Fallback to local storage
       const saved = localStorage.getItem('bizbize_active_chats');
       setChats(saved ? JSON.parse(saved) : []);
-    };
-    loadChats();
-    // Refresh chats whenever the window receives focus or local storage changes
-    window.addEventListener('focus', loadChats);
-    return () => window.removeEventListener('focus', loadChats);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'users', myUid, 'active_chats'),
+      orderBy('updatedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const activeList: ChatItem[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        activeList.push({
+          id: doc.id,
+          name: data.name || 'Gizli Sohbet',
+          avatar: data.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${doc.id}`,
+          lastMessage: data.lastMessage || '',
+          time: data.time || '',
+          unreadCount: 0,
+          type: data.type || 'user'
+        });
+      });
+      setChats(activeList);
+      localStorage.setItem('bizbize_active_chats', JSON.stringify(activeList));
+    }, (err) => {
+      console.error("Firestore aktif sohbet dinleme hatası:", err);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const filteredChats = chats.filter(chat => {

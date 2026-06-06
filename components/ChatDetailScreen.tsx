@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatItem, Message, CallType } from '../types';
 import { GoogleGenAI } from '@google/genai';
 import { saveMessageToDb, subscribeToMessages } from '../db';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 interface ChatDetailProps {
   chat: ChatItem;
@@ -59,10 +60,12 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
+    const textToSend = inputText.trim();
+
     const userMsg: Message = {
       id: Math.random().toString(36).substr(2, 9),
       senderId: myUid,
-      text: inputText,
+      text: textToSend,
       type: 'text',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isMe: true,
@@ -70,8 +73,42 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
     };
 
     setInputText('');
+    
     // Save to E2EE Database using the deterministic chatId
     await saveMessageToDb(deterministicChatId, userMsg, secretKey);
+
+    // Save/update active chats metadata in Firestore for both users so they discover each other instantly
+    if (db) {
+      try {
+        const myProfile = JSON.parse(localStorage.getItem('bizbize_profile') || '{}');
+        const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const updatedTimeIso = new Date().toISOString();
+
+        // 1. Update my active chats list
+        await setDoc(doc(db, 'users', myUid, 'active_chats', targetUid), {
+          id: targetUid,
+          name: chat.name,
+          avatar: chat.avatar,
+          lastMessage: textToSend,
+          time: timestampStr,
+          type: 'user',
+          updatedAt: updatedTimeIso
+        }, { merge: true });
+
+        // 2. Update target user's active chats list so it pops up in their chats tab
+        await setDoc(doc(db, 'users', targetUid, 'active_chats', myUid), {
+          id: myUid,
+          name: myProfile.name || 'Gizli Sohbet',
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(myProfile.name || myUid)}`,
+          lastMessage: textToSend,
+          time: timestampStr,
+          type: 'user',
+          updatedAt: updatedTimeIso
+        }, { merge: true });
+      } catch (err) {
+        console.error("Firestore aktif sohbet listesi güncellenirken hata:", err);
+      }
+    }
   };
 
   const handleTranscript = async (msgId: string) => {
