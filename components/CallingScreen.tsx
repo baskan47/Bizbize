@@ -49,9 +49,7 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
-    if (socketRef.current) {
-      socketRef.current.close();
-    }
+    // Do not close socketRef.current since it references the global socket in App.tsx
   };
 
 
@@ -123,11 +121,11 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
           targetId: chat.id,
           answer: answer
         }));
-        setCallStatus('secure');
+        setCallStatus('connecting'); // Wait for WebRTC connection to handshake to go secure
       }
     } catch (err) {
       console.error("Kamera/Mikrofon erişim hatası veya WebRTC kurulum hatası:", err);
-      setCallStatus('secure');
+      // Let it stay in ringing or connecting rather than forcing 'secure' if there's an error
     }
   };
 
