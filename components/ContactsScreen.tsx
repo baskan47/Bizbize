@@ -106,8 +106,9 @@ const ContactsScreen: React.FC<ContactsScreenProps> = ({ onSelectContact, onBack
       }
     } else {
       // Mock mode fallback
+      const cleanUsername = targetId.startsWith('@') ? targetId.slice(1) : targetId;
       const mockUser: ChatItem = {
-        id: `mock-${Math.random().toString(36).substr(2, 9)}`,
+        id: `mock-${cleanUsername.trim().toLowerCase()}`,
         name: `Kullanıcı (${targetId})`,
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(targetId)}`,
         lastMessage: 'bizbize ile güvende',

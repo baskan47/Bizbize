@@ -103,6 +103,7 @@ export function subscribeToMessages(
         if (data.isEncrypted && data.text) {
           data.text = await decryptMessage(data.text, secretKey);
         }
+        data.docId = doc.id;
         msgs.push(data);
       }
       onUpdate(msgs);
@@ -129,4 +130,54 @@ export function subscribeToMessages(
   const timer = setInterval(loadLocal, 1500);
 
   return () => clearInterval(timer);
+}
+
+export async function recallMessageInDb(chatId: string, messageDocId: string, messageId: string) {
+  if (db) {
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      const msgRef = doc(db, 'chats', chatId, 'messages', messageDocId);
+      await updateDoc(msgRef, {
+        type: 'recalled',
+        text: 'Bu mesaj geri alındı',
+        isEncrypted: false
+      });
+      return;
+    } catch (err) {
+      console.error("Recall message error:", err);
+    }
+  }
+  // Fallback for mock mode
+  const localHistoryKey = `bizbize_history_${chatId}`;
+  const localHistory = JSON.parse(localStorage.getItem(localHistoryKey) || '[]');
+  const updated = localHistory.map((m: any) => {
+    if (m.id === messageId) {
+      return {
+        ...m,
+        type: 'recalled',
+        text: 'Bu mesaj geri alındı',
+        isEncrypted: false
+      };
+    }
+    return m;
+  });
+  localStorage.setItem(localHistoryKey, JSON.stringify(updated));
+}
+
+export async function deleteMessageFromDb(chatId: string, messageDocId: string, messageId: string) {
+  if (db) {
+    try {
+      const { doc, deleteDoc } = await import('firebase/firestore');
+      const msgRef = doc(db, 'chats', chatId, 'messages', messageDocId);
+      await deleteDoc(msgRef);
+      return;
+    } catch (err) {
+      console.error("Delete message error:", err);
+    }
+  }
+  // Fallback for mock mode
+  const localHistoryKey = `bizbize_history_${chatId}`;
+  const localHistory = JSON.parse(localStorage.getItem(localHistoryKey) || '[]');
+  const updated = localHistory.filter((m: any) => m.id !== messageId);
+  localStorage.setItem(localHistoryKey, JSON.stringify(updated));
 }

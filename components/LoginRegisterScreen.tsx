@@ -101,11 +101,14 @@ const LoginRegisterScreen: React.FC<LoginRegisterScreenProps> = ({ onLoginSucces
         if (mode === 'register') {
           setStep('profile');
         } else {
+          const cleanUser = email.split('@')[0].toLowerCase();
           onLoginSuccess({
+            uid: `mock-${cleanUser}`,
             name: email.split('@')[0],
             phone: email.trim(),
             status: statusText.trim(),
-            avatarSeed: email.split('@')[0]
+            avatarSeed: email.split('@')[0],
+            userId: '@' + cleanUser
           });
         }
       }, 1200);

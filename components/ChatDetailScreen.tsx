@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatItem, Message, CallType } from '../types';
 import { GoogleGenAI } from '@google/genai';
-import { saveMessageToDb, subscribeToMessages } from '../db';
+import { saveMessageToDb, subscribeToMessages, recallMessageInDb, deleteMessageFromDb } from '../db';
 import { auth, db } from '../firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 
 interface ChatDetailProps {
   chat: ChatItem;
@@ -30,6 +30,8 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
   const [editGroupName, setEditGroupName] = useState(chat.name);
   const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
   const [groupUpdateMsg, setGroupUpdateMsg] = useState('');
+  const [contextMenuMessage, setContextMenuMessage] = useState<{ msg: Message; x: number; y: number } | null>(null);
+  const [showChatSettings, setShowChatSettings] = useState(false);
 
   // Deterministic Chat ID for E2EE database synchronization
   const myUid = auth?.currentUser?.uid || 'me';
@@ -373,6 +375,86 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
     setMessages(prev => prev.filter(m => m.id !== id));
   };
 
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setContextMenuMessage(null);
+  };
+
+  const handleRecallMessage = async (msg: Message) => {
+    if (msg.docId) {
+      await recallMessageInDb(deterministicChatId, msg.docId, msg.id);
+    } else {
+      await recallMessageInDb(deterministicChatId, '', msg.id);
+    }
+    setContextMenuMessage(null);
+  };
+
+  const handleDeleteChat = async () => {
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'users', myUid, 'active_chats', targetUid));
+        const savedChats = localStorage.getItem('bizbize_active_chats');
+        if (savedChats) {
+          const activeChats: ChatItem[] = JSON.parse(savedChats);
+          const updated = activeChats.filter(c => c.id !== chat.id);
+          localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+        }
+        setShowChatSettings(false);
+        onBack();
+      } catch (err) {
+        console.error("Sohbet silme hatası:", err);
+      }
+    } else {
+      const savedChats = localStorage.getItem('bizbize_active_chats');
+      if (savedChats) {
+        const activeChats: ChatItem[] = JSON.parse(savedChats);
+        const updated = activeChats.filter(c => c.id !== chat.id);
+        localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+      }
+      setShowChatSettings(false);
+      onBack();
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    setIsUpdatingGroup(true);
+    setGroupUpdateMsg('');
+    const updatedMembers = chat.members || [myUid];
+
+    if (db) {
+      try {
+        for (const memberId of updatedMembers) {
+          await deleteDoc(doc(db, 'users', memberId, 'active_chats', chat.id));
+        }
+        await deleteDoc(doc(db, 'groups', chat.id));
+        
+        const savedChats = localStorage.getItem('bizbize_active_chats');
+        if (savedChats) {
+          const activeChats: ChatItem[] = JSON.parse(savedChats);
+          const updated = activeChats.filter(c => c.id !== chat.id);
+          localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+        }
+        
+        setShowGroupSettings(false);
+        onBack();
+      } catch (err: any) {
+        console.error("Grup silme hatası:", err);
+        setGroupUpdateMsg('Hata: ' + (err.message || err));
+      } finally {
+        setIsUpdatingGroup(false);
+      }
+    } else {
+      const savedChats = localStorage.getItem('bizbize_active_chats');
+      if (savedChats) {
+        const activeChats: ChatItem[] = JSON.parse(savedChats);
+        const updated = activeChats.filter(c => c.id !== chat.id);
+        localStorage.setItem('bizbize_active_chats', JSON.stringify(updated));
+      }
+      setShowGroupSettings(false);
+      onBack();
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col relative h-full bg-background-dark border-l border-white/5">
       <header className="h-20 bg-surface-dark/50 backdrop-blur-md px-6 flex items-center justify-between border-b border-white/5 z-10 shrink-0">
@@ -382,7 +464,7 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
               <span className="material-icons-round text-3xl">chevron_left</span>
             </button>
           )}
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => chat.type === 'group' ? setShowGroupSettings(true) : onGoLive()}>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => chat.type === 'group' ? setShowGroupSettings(true) : setShowChatSettings(true)}>
             <div className="relative">
               <img src={chat.avatar} className="w-11 h-11 rounded-full border border-white/10 bg-slate-700" alt="" />
               <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-stitch-green rounded-full border-2 border-background-dark pulse-green"></div>
@@ -420,6 +502,9 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
               <button onClick={() => onCall('video')} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all">
                 <span className="material-icons-round">videocam</span>
               </button>
+              <button onClick={() => setShowChatSettings(true)} title="Sohbet Ayarları" className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all">
+                <span className="material-icons-round">settings</span>
+              </button>
             </>
           )}
           <div className="w-[1px] h-6 bg-white/5 mx-1 hidden sm:block"></div>
@@ -441,15 +526,45 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
         ) : (
           messages.map(msg => (
             <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className="flex items-end gap-2 max-w-[85%] lg:max-w-[70%]">
+              <div 
+                className="flex items-end gap-2 max-w-[85%] lg:max-w-[70%]"
+                onContextMenu={(e) => {
+                  if (msg.type === 'recalled') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenuMessage({
+                    msg,
+                    x: e.clientX,
+                    y: e.clientY
+                  });
+                }}
+              >
                 {!msg.isMe && <img src={chat.avatar} className="w-6 h-6 rounded-full border border-white/5 bg-slate-700 hidden sm:block" alt="" />}
+                {msg.type === 'recalled' && (
+                  <div className="px-4 py-2.5 bg-white/5 border border-white/5 text-slate-500 rounded-2xl rounded-tr-none flex items-center gap-2 italic text-xs">
+                    <span className="material-icons-round text-sm">history</span>
+                    <span>{msg.text || 'Bu mesaj geri alındı'}</span>
+                  </div>
+                )}
                 {msg.type === 'text' && (
-                  <div className={`px-4 py-3 rounded-2xl shadow-xl ${msg.isMe ? 'bg-primary text-white rounded-tr-none' : 'bg-surface-dark text-slate-200 rounded-tl-none border border-white/5'}`}>
+                  <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setContextMenuMessage({ msg, x: e.clientX, y: e.clientY });
+                    }}
+                    className={`px-4 py-3 rounded-2xl shadow-xl cursor-pointer ${msg.isMe ? 'bg-primary text-white rounded-tr-none' : 'bg-surface-dark text-slate-200 rounded-tl-none border border-white/5'}`}
+                  >
                     <p className="text-sm leading-relaxed">{msg.text}</p>
                   </div>
                 )}
                 {msg.type === 'image' && (
-                  <div className="flex flex-col bg-surface-dark border border-white/5 rounded-2xl overflow-hidden shadow-xl max-w-sm">
+                  <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setContextMenuMessage({ msg, x: e.clientX, y: e.clientY });
+                    }}
+                    className="flex flex-col bg-surface-dark border border-white/5 rounded-2xl overflow-hidden shadow-xl max-w-sm cursor-pointer"
+                  >
                     <img src={msg.imageUrl} className="w-full h-auto max-h-60 object-cover" alt="Paylaşılan Görsel" />
                     {msg.imageCaption && (
                       <div className="p-3 text-sm text-slate-200 border-t border-white/5">
@@ -459,12 +574,18 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
                   </div>
                 )}
                 {msg.type === 'voice' && (
-                  <div className="bg-primary/10 border border-primary/20 p-4 rounded-2xl rounded-bl-none flex items-center gap-4">
-                    <span className="material-icons-round text-primary text-3xl cursor-pointer hover:scale-105 active:scale-95 transition-transform">play_circle</span>
+                  <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setContextMenuMessage({ msg, x: e.clientX, y: e.clientY });
+                    }}
+                    className="bg-primary/10 border border-primary/20 p-4 rounded-2xl rounded-bl-none flex items-center gap-4 cursor-pointer"
+                  >
+                    <span onClick={(e) => e.stopPropagation()} className="material-icons-round text-primary text-3xl cursor-pointer hover:scale-105 active:scale-95 transition-transform">play_circle</span>
                     <div className="flex items-end gap-1 h-6">
                       {[12, 20, 15, 25, 18, 22, 10, 16].map((h, i) => <div key={i} className="w-1 bg-primary/40 rounded-full" style={{height: `${h}px`}}></div>)}
                     </div>
-                    <button onClick={() => handleTranscript(msg.id)} disabled={isTranscribing === msg.id} className="p-2 hover:bg-primary/20 rounded-lg text-primary transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); handleTranscript(msg.id); }} disabled={isTranscribing === msg.id} className="p-2 hover:bg-primary/20 rounded-lg text-primary transition-colors">
                       <span className={`material-icons-round text-sm ${isTranscribing === msg.id ? 'spin-slow' : ''}`}>translate</span>
                     </button>
                   </div>
@@ -523,7 +644,7 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
               
               <div className="flex items-center gap-2 mt-2 px-1">
                 <span className="text-[10px] text-slate-500 font-medium">{msg.timestamp}</span>
-                {msg.isMe && (
+                {msg.isMe && msg.type !== 'recalled' && (
                   <div className="flex items-center">
                     <span className={`material-icons-round text-sm ${msg.status === 'read' ? 'text-stitch-green' : 'text-slate-500'}`}>
                       {msg.status === 'read' ? 'done_all' : 'done'}
@@ -531,7 +652,7 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
                   </div>
                 )}
               </div>
-              {msg.transcript && <p className="mt-2 text-[11px] text-slate-400 italic bg-white/5 p-2 rounded-lg border-l-2 border-primary">"{msg.transcript}"</p>}
+              {msg.transcript && msg.type !== 'recalled' && <p className="mt-2 text-[11px] text-slate-400 italic bg-white/5 p-2 rounded-lg border-l-2 border-primary">"{msg.transcript}"</p>}
             </div>
           ))
         )}
@@ -664,6 +785,17 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
                   {groupUpdateMsg}
                 </p>
               )}
+              {/* Delete Group Section */}
+              <div className="pt-4 border-t border-white/5">
+                <button 
+                  onClick={handleDeleteGroup}
+                  disabled={isUpdatingGroup}
+                  className="w-full bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-500 font-bold py-3.5 rounded-2xl text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <span className="material-icons-round text-sm">delete_forever</span>
+                  Grubu Sil ve Ayrıl
+                </button>
+              </div>
             </div>
 
             <button 
@@ -672,6 +804,91 @@ const ChatDetailScreen: React.FC<ChatDetailProps> = ({ chat, initialMessages, on
             >
               Tamam
             </button>
+          </div>
+        </div>
+      )}
+
+      {showChatSettings && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in">
+          <div className="bg-surface-dark/95 border border-white/10 rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl animate-scale-in text-white overflow-hidden max-h-[90%] flex flex-col">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <div>
+                <h3 className="text-xl font-bold">Sohbet & Profil Bilgisi</h3>
+                <p className="text-xs text-slate-400">Güvenli eşleşme detayları</p>
+              </div>
+              <button onClick={() => setShowChatSettings(false)} className="text-slate-500 hover:text-white p-1.5 hover:bg-white/5 rounded-full transition-all">
+                <span className="material-icons-round">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-1">
+              <div className="flex flex-col items-center text-center bg-white/5 border border-white/5 rounded-2xl p-6">
+                <img src={chat.avatar} className="w-20 h-20 rounded-full border-2 border-primary/20 bg-slate-700 mb-4" alt="Kullanıcı Avatarı" />
+                <h4 className="text-lg font-bold">{chat.name}</h4>
+                <p className="text-xs text-slate-400 mt-1">{chat.lastMessage || 'bizbize ile güvende'}</p>
+                <div className="mt-4 flex items-center gap-2 px-3 py-1 bg-stitch-green/10 border border-stitch-green/20 rounded-full text-stitch-green">
+                  <span className="material-icons-round text-xs">verified</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Doğrulanmış Düğüm</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/5">
+                <button 
+                  onClick={handleDeleteChat}
+                  className="w-full bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-500 font-bold py-3.5 rounded-2xl text-xs transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <span className="material-icons-round text-sm">delete_forever</span>
+                  Sohbeti Sil
+                </button>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setShowChatSettings(false)} 
+              className="w-full bg-slate-700 hover:bg-slate-650 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all mt-6 shrink-0 text-xs"
+            >
+              Kapat
+            </button>
+          </div>
+        </div>
+      )}
+
+      {contextMenuMessage && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/10 backdrop-blur-[2px]" 
+          onClick={() => setContextMenuMessage(null)}
+          onContextMenu={(e) => { e.preventDefault(); setContextMenuMessage(null); }}
+        >
+          <div 
+            className="absolute bg-surface-dark/65 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 shadow-2xl min-w-[150px] animate-in zoom-in-95 duration-150"
+            style={{ 
+              top: Math.min(contextMenuMessage.y, window.innerHeight - 120), 
+              left: Math.min(contextMenuMessage.x, window.innerWidth - 170) 
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contextMenuMessage.msg.text && (
+              <button 
+                onClick={() => {
+                  if (contextMenuMessage.msg.text) {
+                    handleCopyText(contextMenuMessage.msg.text);
+                  }
+                }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+              >
+                <span className="material-icons-round text-sm">content_copy</span>
+                Kopyala
+              </button>
+            )}
+            {contextMenuMessage.msg.isMe && contextMenuMessage.msg.type !== 'recalled' && (
+              <button 
+                onClick={() => handleRecallMessage(contextMenuMessage.msg)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+              >
+                <span className="material-icons-round text-sm">undo</span>
+                Mesajı Geri Al
+              </button>
+            )}
           </div>
         </div>
       )}

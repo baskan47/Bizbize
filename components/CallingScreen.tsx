@@ -22,6 +22,7 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const iceCandidatesQueueRef = useRef<RTCIceCandidateInit[]>([]);
 
   // Initialize call timer when call goes secure
   useEffect(() => {
@@ -90,6 +91,12 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
         }
       };
 
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          setCallStatus('secure');
+        }
+      };
+
       // Handle ICE Candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -111,6 +118,18 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
           callType: callType,
           offer: offer
         }));
+
+        // Flush any queued candidates
+        if (iceCandidatesQueueRef.current.length > 0) {
+          for (const cand of iceCandidatesQueueRef.current) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (e) {
+              console.error("Failed to add queued candidate:", e);
+            }
+          }
+          iceCandidatesQueueRef.current = [];
+        }
       } else if (incomingOffer) {
         // Process existing incoming offer
         await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer.offer));
@@ -122,6 +141,18 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
           answer: answer
         }));
         setCallStatus('connecting'); // Wait for WebRTC connection to handshake to go secure
+
+        // Flush any queued candidates
+        if (iceCandidatesQueueRef.current.length > 0) {
+          for (const cand of iceCandidatesQueueRef.current) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (e) {
+              console.error("Failed to add queued candidate:", e);
+            }
+          }
+          iceCandidatesQueueRef.current = [];
+        }
       }
     } catch (err) {
       console.error("Kamera/Mikrofon erişim hatası veya WebRTC kurulum hatası:", err);
@@ -155,12 +186,32 @@ const CallingScreen: React.FC<CallingScreenProps> = ({ callType, chat, isIncomin
             if (pc) {
               await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
               setCallStatus('secure');
+              
+              // Flush any queued candidates
+              if (iceCandidatesQueueRef.current.length > 0) {
+                for (const cand of iceCandidatesQueueRef.current) {
+                  try {
+                    await pc.addIceCandidate(new RTCIceCandidate(cand));
+                  } catch (e) {
+                    console.error("Failed to add queued candidate on answer:", e);
+                  }
+                }
+                iceCandidatesQueueRef.current = [];
+              }
             }
             break;
 
           case 'candidate':
-            if (pc && data.candidate) {
-              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            if (data.candidate) {
+              if (pc && pc.remoteDescription) {
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                } catch (e) {
+                  console.error("Failed to add ICE candidate:", e);
+                }
+              } else {
+                iceCandidatesQueueRef.current.push(data.candidate);
+              }
             }
             break;
 

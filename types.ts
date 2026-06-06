@@ -41,7 +41,7 @@ export interface Message {
   id: string;
   senderId: string;
   text?: string;
-  type: 'text' | 'voice' | 'ephemeral' | 'poll' | 'file' | 'image' | 'livestream';
+  type: 'text' | 'voice' | 'ephemeral' | 'poll' | 'file' | 'image' | 'livestream' | 'recalled';
   timestamp: string;
   isMe: boolean;
   status: 'sent' | 'delivered' | 'read';
@@ -55,5 +55,6 @@ export interface Message {
   imageCaption?: string;
   livestreamRoomId?: string;
   livestreamSenderName?: string;
+  docId?: string;
 }
 
