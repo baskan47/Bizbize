@@ -139,7 +139,8 @@ const ChatListScreen: React.FC<ChatListProps> = ({ onSelectChat, onDiscovery, on
           lastMessage: data.lastMessage || '',
           time: data.time || '',
           unreadCount: 0,
-          type: data.type || 'user'
+          type: data.type || 'user',
+          members: data.members || []
         });
       });
       setChats(activeList);
